@@ -62,7 +62,7 @@ export default function PostForm() {
       const fileName = `${Math.random()}.${fileExt}`
       const filePath = `${fileName}`
 
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('lost-and-found-images')
         .upload(filePath, file, {
           cacheControl: '3600',

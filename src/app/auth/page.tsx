@@ -69,7 +69,7 @@ export default function AuthPage() {
         if (hashError) throw hashError
 
         // Create user
-        const { data: newUser, error: createError } = await supabase
+        const { error: createError } = await supabase
           .from('users')
           .insert([{ 
             username: cleanUsername, 
@@ -99,8 +99,10 @@ export default function AuthPage() {
         localStorage.setItem('username', cleanUsername)
         router.push('/')
       }
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        setError(error.message)
+      }
     } finally {
       setLoading(false)
     }
@@ -166,7 +168,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#57068B] hover:bg-[#6A0BA7] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#57068B]"
             >
               {loading ? 'Processing...' : isLogin ? 'Sign in' : 'Sign up'}
             </button>
@@ -180,7 +182,7 @@ export default function AuthPage() {
                 setError('')
                 setPassword('')
               }}
-              className="font-medium text-blue-600 hover:text-blue-500"
+              className="font-medium text-[#57068B] hover:text-[#6A0BA7]"
             >
               {isLogin
                 ? "Don't have an account? Sign up"

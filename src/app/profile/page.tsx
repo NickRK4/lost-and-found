@@ -36,8 +36,12 @@ export default function Profile() {
           setUsername(profile.username)
           setNewUsername(profile.username)
         }
-      } catch (error) {
-        console.error('Error fetching profile:', error as any)
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error('Error fetching profile:', error.message)
+        } else {
+          console.error('Unknown error fetching profile')
+        }
       } finally {
         setIsLoading(false)
       }
@@ -85,9 +89,14 @@ export default function Profile() {
       setUsername(newUsername)
       setNewUsername(newUsername)
       setError('')
-    } catch (error) {
-      console.error('Error updating username:', error)
-      setError((error as Error).message || 'Failed to update username')
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error updating username:', error.message)
+        setError(error.message || 'Failed to update username')
+      } else {
+        console.error('Unknown error updating username')
+        setError('Failed to update username')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -159,6 +168,16 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="flex items-center text-gray-600 hover:text-gray-800 transition-colors mb-4"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L4.414 9H17a1 1 0 110 2H4.414l5.293 5.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+          Back
+        </button>
         <h2 className="text-2xl font-bold mb-6">Profile Settings</h2>
         
         {error && (
@@ -175,12 +194,12 @@ export default function Profile() {
               type="text"
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
             />
             <button
               onClick={updateUsername}
               disabled={isLoading || newUsername === username}
-              className="mt-2 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 disabled:opacity-50"
+              className="mt-2 w-full bg-[#861397] text-white py-2 px-4 rounded-md hover:bg-opacity-90 disabled:opacity-50"
             >
               Update Username
             </button>
@@ -193,19 +212,19 @@ export default function Profile() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
             />
             <label className="block text-sm font-medium text-gray-700 mt-4">Confirm Password</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
             />
             <button
               onClick={updatePassword}
               disabled={isLoading || !password || !confirmPassword}
-              className="mt-2 w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 disabled:opacity-50"
+              className="mt-2 w-full bg-[#861397] text-white py-2 px-4 rounded-md hover:bg-opacity-90 disabled:opacity-50"
             >
               Update Password
             </button>

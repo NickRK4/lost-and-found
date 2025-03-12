@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import dynamic from 'next/dynamic';
@@ -17,6 +17,46 @@ export default function NewPost() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [coordinates, setCoordinates] = useState<[number, number]>([51.505, -0.09])
+  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ display_name: string; lat: number; lon: number }>>([])  
+  const [locationDebounceTimeout, setLocationDebounceTimeout] = useState<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    const fetchLocationSuggestions = async () => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
+        );
+        const data = await response.json();
+        setLocationSuggestions(data.map((item: any) => ({
+          display_name: item.display_name,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon)
+        })));
+      } catch (error) {
+        console.error('Error fetching location suggestions:', error);
+      }
+    };
+
+    // Clear existing timeout
+    if (locationDebounceTimeout) {
+      clearTimeout(locationDebounceTimeout);
+    }
+
+    // Set new timeout
+    if (location) {
+      const timeout = setTimeout(fetchLocationSuggestions, 500);
+      setLocationDebounceTimeout(timeout);
+    } else {
+      setLocationSuggestions([]);
+    }
+
+    // Cleanup
+    return () => {
+      if (locationDebounceTimeout) {
+        clearTimeout(locationDebounceTimeout);
+      }
+    };
+  }, [location])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,7 +107,7 @@ export default function NewPost() {
 
       console.log('Public URL:', publicUrl)
 
-      // Create post
+      // Create post with coordinates
       const { error: postError } = await supabase
         .from('posts')
         .insert({
@@ -76,7 +116,9 @@ export default function NewPost() {
           description,
           location,
           image_url: publicUrl,
-          status: 'active'
+          status: 'active',
+          latitude: coordinates[0],
+          longitude: coordinates[1]
         })
 
       if (postError) {
@@ -100,8 +142,11 @@ export default function NewPost() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="mb-4 px-4 py-2 bg-[#550688] text-white rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#550688]"
+          className="flex items-center text-gray-600 hover:text-gray-800 transition-colors mb-4"
         >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L4.414 9H17a1 1 0 110 2H4.414l5.293 5.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
           Back
         </button>
         <h2 className="text-2xl font-bold mb-6 text-gray-900">Post Lost/Found Item</h2>
@@ -121,7 +166,7 @@ export default function NewPost() {
             />
           </div>
 
-          <div>
+          <div className="relative">
             <label htmlFor="location" className="block text-sm font-medium text-gray-700">
               Location
             </label>
@@ -129,10 +174,30 @@ export default function NewPost() {
               type="text"
               id="location"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => {
+                setLocation(e.target.value);
+              }}
               required
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="Type to search for locations..."
             />
+            {locationSuggestions.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-auto border border-gray-200">
+                {locationSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+                    onClick={() => {
+                      setLocation(suggestion.display_name);
+                      setCoordinates([suggestion.lat, suggestion.lon]);
+                      setLocationSuggestions([]);
+                    }}
+                  >
+                    {suggestion.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

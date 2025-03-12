@@ -118,7 +118,7 @@ export default function ChatRoom({ post }: { post: any }) {
         <div className="p-4 border-b flex items-center gap-2">
           <button
             onClick={() => router.back()}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-full"
+            className="md:hidden p-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full hover:bg-opacity-80 disabled:opacity-50"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -184,7 +184,7 @@ export default function ChatRoom({ post }: { post: any }) {
             <button
               type="submit"
               disabled={!newMessage.trim()}
-              className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50"
+              className="p-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full hover:bg-opacity-80 disabled:opacity-50"
             >
               <Send className="w-5 h-5" />
             </button>

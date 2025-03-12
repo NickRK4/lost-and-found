@@ -1,16 +1,18 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
 
+// eslint-disable-next-line no-console
 console.log("hello world - this is test!");
 
-import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import ClaimModal from '@/components/ClaimModal'
-import ChatList from '@/components/ChatList'
-import ChatMessages from '@/components/ChatMessages'
 import debounce from 'lodash.debounce'
+import dynamic from 'next/dynamic'
+
+const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false })
 
 type TimeRange = '1day' | '7days' | 'older'
 
@@ -24,6 +26,8 @@ interface Post {
   user_id: string
   username: string
   status: 'active' | 'claimed' | 'resolved'
+  latitude: number
+  longitude: number
 }
 
 export default function Home() {
@@ -31,31 +35,19 @@ export default function Home() {
   const [timeRange, setTimeRange] = useState<TimeRange>('7days')
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
-  const [showChatMenu, setShowChatMenu] = useState(false)
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
-  const [selectedChatId, setSelectedChatId] = useState<string>()
   const [searchQuery, setSearchQuery] = useState('')
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
-  const currentUserId = localStorage.getItem('user_id')
+  const currentUserId = localStorage.getItem('user_id') || ''
   const postCardRef = useRef<HTMLDivElement>(null)
   const [postCardWidth, setPostCardWidth] = useState<number>(300)
   const [expandedImage, setExpandedImage] = useState<string | null>(null)
+  const [showMapId, setShowMapId] = useState<string | null>(null)
 
   useEffect(() => {
     if (postCardRef.current) {
       setPostCardWidth(postCardRef.current.offsetWidth)
     }
-  }, [])
-
-  useEffect(() => {
-    const userId = localStorage.getItem('user_id')
-    if (!userId) {
-      router.push('/auth')
-      return
-    }
-
-    fetchPosts()
   }, [timeRange])
 
   const fetchPosts = async () => {
@@ -71,6 +63,7 @@ export default function Home() {
         .order('created_at', { ascending: false })
 
       if (error) {
+        // eslint-disable-next-line no-console
         console.error('Fetch error:', error)
         throw error
       }
@@ -98,11 +91,22 @@ export default function Home() {
       
       setPosts(filteredPosts)
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Error fetching posts:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const userId = localStorage.getItem('user_id')
+    if (!userId) {
+      router.push('/auth')
+      return
+    }
+
+    fetchPosts()
+  }, [timeRange])
 
   const handleStartChat = async (postId: string, creatorId: string) => {
     try {
@@ -139,6 +143,7 @@ export default function Home() {
         router.push(`/chat/${newChat.id}`)
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Error starting chat:', error)
     }
   }
@@ -161,29 +166,40 @@ export default function Home() {
       // Refresh posts
       fetchPosts()
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('Error claiming item:', error)
     }
   }
 
   const debouncedSearch = useCallback(
     debounce((query: string) => {
-      const fetchPosts = async () => {
-        let supabaseQuery = supabase
-          .from('posts')
-          .select('*')
-          .order('created_at', { ascending: false })
-
-        if (query) {
-          supabaseQuery = supabaseQuery.or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+      const now = new Date()
+      const filteredByTime = posts.filter(post => {
+        const postDate = new Date(post.created_at)
+        const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24)
+        
+        switch (timeRange) {
+          case '1day':
+            return diffDays <= 1
+          case '7days':
+            return diffDays <= 7
+          case 'older':
+            return diffDays > 7
+          default:
+            return true
         }
+      })
 
-        const { data } = await supabaseQuery
-        setFilteredPosts(data || [])
-      }
+      const searchFiltered = query
+        ? filteredByTime.filter(post =>
+            post.title.toLowerCase().includes(query.toLowerCase()) ||
+            post.description.toLowerCase().includes(query.toLowerCase())
+          )
+        : filteredByTime
 
-      fetchPosts()
+      setFilteredPosts(searchFiltered)
     }, 300),
-    []
+    [posts, timeRange]
   )
 
   useEffect(() => {
@@ -192,20 +208,6 @@ export default function Home() {
       debouncedSearch.cancel()
     }
   }, [searchQuery, debouncedSearch])
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (showProfileMenu && target && !target.closest('.profile-menu')) {
-        setShowProfileMenu(false)
-      }
-    }
-
-    document.addEventListener('click', handleClickOutside)
-    return () => {
-      document.removeEventListener('click', handleClickOutside)
-    }
-  }, [showProfileMenu])
 
   const handleImageClick = (imageUrl: string) => {
     setExpandedImage(imageUrl)
@@ -216,105 +218,30 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <button
-            onClick={() => setShowChatMenu(!showChatMenu)}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-center h-12">
-        <div
-            onClick={() => router.push('/')}
-            className="text-3xl font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 bg-[length:300%_300%] animate-gradient bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
-            style={{animation: 'gradient 5s ease infinite'}}
-          >
-            Lost & Found
-          </div>
-        </div>
-      </div>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => router.push('/post/new')}
-              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
-            >
-              Post Item
-            </button>
-            
-            <div className="relative ml-4 flex items-center">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowProfileMenu(!showProfileMenu)
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </button>
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50 profile-menu" onClick={(e) => e.stopPropagation()}>
-                  <Link
-                    href="/profile"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={(e) => {
-                      //e.preventDefault()
-                      e.stopPropagation()
-                      setShowProfileMenu(false)
-                      router.push('/profile')
-                    }}
-                  >
-                    Edit Profile
-                  </Link>
-                  <button
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      await supabase.auth.signOut()
-                      localStorage.removeItem('user_id')
-                      router.push('/auth')
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-screen transition-colors" style={{ backgroundColor: '#57068B' }}>
       {/* Time Range Filter */}
       <div className="max-w-7xl mx-auto px-4 py-6 mb-5">
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
             <button
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                timeRange === '1day' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                timeRange === '1day' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('1day')}
             >
               Last 24 Hours
             </button>
             <button
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                timeRange === '7days' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                timeRange === '7days' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('7days')}
             >
               Last 7 Days
             </button>
             <button
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                timeRange === 'older' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                timeRange === 'older' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('older')}
             >
@@ -325,7 +252,7 @@ export default function Home() {
           <div className="w-64">
             <input
               type="text"
-              className="w-full px-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#861397] focus:border-[#861397]"
               placeholder="Search for items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -334,20 +261,20 @@ export default function Home() {
         </div>
         <div className="flex space-x-4">
           {/* Posts Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-5 w-full">
             {loading ? (
-              <p>Loading...</p>
+              <p className="text-white">Loading...</p>
             ) : filteredPosts.length === 0 ? (
-              <p>No posts found</p>
+              <p className="text-white">No posts found</p>
             ) : (
               filteredPosts.map((post) => (
                 <div
                   key={post.id}
                   ref={postCardRef}
-                  className="bg-white rounded-lg shadow-md overflow-hidden"
+                  className="bg-white rounded-lg shadow-md overflow-hidden w-full"
                   style={{ minWidth: postCardWidth }}
                 >
-                  <div className="relative h-48">
+                  <div className="relative h-64">
                     <Image
                       src={post.image_url}
                       alt={post.title}
@@ -357,7 +284,37 @@ export default function Home() {
                   </div>
                   <div className="p-4">
                     <h3 className="text-lg font-semibold mb-2">{post.title}</h3>
-                    <p className="text-gray-600 mb-2">{post.location}</p>
+                    <div className="flex items-center mb-2">
+                      <p className="text-gray-600 flex-grow truncate">{post.location}</p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();  // Prevent opening the claim modal
+                          setShowMapId(showMapId === post.id ? null : post.id);
+                        }}
+                        className="flex items-center text-[#57068B] hover:text-[#6A0BA7] transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#57068B] focus:ring-opacity-50 rounded-md px-3 py-1.5"
+                      >
+                        <span className="mr-1">{showMapId === post.id ? 'Hide Map' : 'Show Map'}</span>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className={`h-4 w-4 transform transition-transform ${showMapId === post.id ? 'rotate-180' : ''}`}
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                    {showMapId === post.id && (
+                      <div className="h-48 w-full rounded-lg overflow-hidden border border-gray-200 mb-4">
+                        <MapComponent
+                          coordinates={[post.latitude, post.longitude]}
+                          setCoordinates={() => {}}
+                          address={post.location}
+                          setAddress={() => {}}
+                          interactive={false}
+                        />
+                      </div>
+                    )}
                     <p className="text-gray-500 text-sm mb-4">{post.description}</p>
                     <button
                       onClick={() => setSelectedPost(post)}
@@ -365,7 +322,7 @@ export default function Home() {
                       className={`w-full px-4 py-2 rounded-md ${
                         post.user_id === currentUserId
                           ? 'bg-gray-300 cursor-not-allowed'
-                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                          : 'bg-[#57068B] text-white hover:bg-[#6A0BA7]'
                       }`}
                     >
                       {post.user_id === currentUserId ? 'Your Post' : 'Claim Item'}
@@ -377,32 +334,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
-      {/* Chat Menu */}
-      {showChatMenu && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowChatMenu(false)} />
-          <div className="fixed inset-y-0 left-0 max-w-md w-full bg-white shadow-xl">
-            <div className="h-full flex flex-col py-6 bg-white shadow-xl">
-              <div className="px-4 sm:px-6 flex justify-between items-center">
-                <h2 className="text-lg font-medium text-gray-900">Messages</h2>
-                <button
-                  onClick={() => setShowChatMenu(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <span className="sr-only">Close panel</span>
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="mt-6 relative flex-1 px-4 sm:px-6 overflow-y-auto">
-                <ChatList />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Claim Modal */}
       {selectedPost && (
@@ -426,14 +357,23 @@ export default function Home() {
                 <h2 className="text-2xl font-bold">{selectedPost.title}</h2>
                 <div className="text-gray-600 dark:text-gray-300">
                   <p className="font-medium">Posted by: {selectedPost.username}</p>
-                  <p className="font-medium">Location: {selectedPost.location}</p>
+                  <p className="font-medium truncate">{selectedPost.location}</p>
                 </div>
                 <p className="text-gray-600 dark:text-gray-300">{selectedPost.description}</p>
-                <div className="flex justify-end pt-4">
+                <div className="flex justify-between pt-4">
+                  <button
+                    onClick={() => setSelectedPost(null)}
+                    className="flex items-center text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L4.414 9H17a1 1 0 110 2H4.414l5.293 5.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                    </svg>
+                    Back
+                  </button>
                   <button
                     onClick={handleClaimItem}
                     disabled={selectedPost.user_id === currentUserId}
-                    className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
+                    className="bg-[#57068B] text-white px-6 py-2 rounded-lg hover:bg-[#6A0BA7] disabled:bg-gray-400 transition-colors"
                   >
                     {selectedPost.user_id === currentUserId ? 'Your Post' : 'Start Chat'}
                   </button>

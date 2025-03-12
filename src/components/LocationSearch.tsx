@@ -8,9 +8,16 @@ interface LocationSearchProps {
   initialLocation?: string
 }
 
+interface Suggestion {
+  display_name: string
+  place_id: string
+  lat: string
+  lon: string
+}
+
 export default function LocationSearch({ onLocationSelect, initialLocation = '' }: LocationSearchProps) {
   const [query, setQuery] = useState(initialLocation)
-  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -47,7 +54,7 @@ export default function LocationSearch({ onLocationSelect, initialLocation = '' 
     }, 300)
   ).current
 
-  const handleSelect = (suggestion: any) => {
+  const handleSelect = (suggestion: Suggestion) => {
     const address = suggestion.display_name
     const coordinates: [number, number] = [
       parseFloat(suggestion.lat),
@@ -102,12 +109,12 @@ export default function LocationSearch({ onLocationSelect, initialLocation = '' 
           }}
           onFocus={() => setShowSuggestions(true)}
           placeholder="Search for a location..."
-          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-var(--primary) dark:bg-gray-700 dark:text-white"
         />
         <button
           type="button"
           onClick={handleGetCurrentLocation}
-          className="px-3 py-2 bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="px-3 py-2 bg-var(--primary) text-var(--primary-foreground) rounded-lg hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-var(--primary)"
         >
           Add Location
         </button>

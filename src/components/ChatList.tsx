@@ -23,7 +23,7 @@ interface Chat {
   }[]
 }
 
-export default function ChatList() {
+export default function ChatList({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
   const currentUserId = localStorage.getItem('user_id')
@@ -57,7 +57,7 @@ export default function ChatList() {
         if (error) throw error
 
         if (data) {
-          const formattedChats: Chat[] = data.map((chat: any) => ({
+          const formattedChats: Chat[] = data.map((chat: { id: string; post: { title: string }[]; creator: { id: string; username: string }[]; claimer: { id: string; username: string }[]; messages: { content: string; created_at: string }[] }) => ({
             id: chat.id,
             post: chat.post[0] || { title: 'Unknown Post' },
             creator: chat.creator[0] || { id: '', username: 'Unknown User' },
@@ -110,7 +110,10 @@ export default function ChatList() {
           <Link
             key={chat.id}
             href={`/chat/${chat.id}`}
-            className="block p-3 rounded-lg hover:bg-gray-100 transition-colors"
+            onClick={(e) => {
+              onClose?.();
+            }}
+            className="block p-3 rounded-lg hover:bg-[#861397]/10 transition-colors"
           >
             <div className="flex items-center justify-between">
               <div>

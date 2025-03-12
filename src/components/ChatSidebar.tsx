@@ -19,22 +19,7 @@ interface Chat {
   }
 }
 
-interface SupabaseChat {
-  id: string
-  post_id: string
-  messages: Array<{
-    content: string
-    created_at: string
-  }> | null
-  posts: {
-    id: string
-    image_url: string
-    description: string
-    created_at: string
-  }
-}
-
-export default function ChatSidebar() {
+export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -114,6 +99,7 @@ export default function ChatSidebar() {
           <a
             key={chat.id}
             href={`/chat/${chat.post_id}`}
+onClick={() => onClose?.()}
             className="flex items-start gap-3 p-4 hover:bg-gray-50 border-b transition-colors"
           >
             <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0">

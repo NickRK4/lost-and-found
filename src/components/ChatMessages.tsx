@@ -187,7 +187,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               <div
                 className={`max-w-[70%] rounded-lg p-3 ${
                   message.user_id === currentUserId
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-[#861397] text-white'
                     : 'bg-gray-100'
                 }`}
               >
@@ -214,12 +214,12 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               if (e.key === 'Enter') handleSendMessage()
             }}
             placeholder="Type your message..."
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:border-blue-500"
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:border-[#861397] focus:ring-1 focus:ring-[#861397]"
           />
           <button
             onClick={handleSendMessage}
             disabled={!newMessage.trim()}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-[#861397] text-white px-4 py-2 rounded-lg hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Send
           </button>

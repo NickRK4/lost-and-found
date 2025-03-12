@@ -18,7 +18,8 @@ interface ClaimModalProps {
     created_at: string
     user_id: string
     username: string
-    coordinates?: string
+    latitude?: number
+    longitude?: number
   }
   onClose: () => void
   onClaim: () => void
@@ -28,23 +29,14 @@ interface ClaimModalProps {
 
 export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children }: ClaimModalProps) {
   const [coordinates, setCoordinates] = useState<[number, number]>([51.505, -0.09]);
+  const [showMap, setShowMap] = useState(false);
 
   useEffect(() => {
-    // Parse coordinates from post if available
-    if (post.coordinates) {
-      try {
-        // Format is typically "POINT(longitude latitude)"
-        const match = post.coordinates.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-        if (match && match.length === 3) {
-          const lon = parseFloat(match[1]);
-          const lat = parseFloat(match[2]);
-          setCoordinates([lat, lon]);
-        }
-      } catch (error) {
-        console.error('Error parsing coordinates:', error);
-      }
+    // Set coordinates from post if available
+    if (post.latitude && post.longitude) {
+      setCoordinates([post.latitude, post.longitude]);
     }
-  }, [post.coordinates]);
+  }, [post.latitude, post.longitude]);
 
   return (
     <>
@@ -96,14 +88,37 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
               </div>
               
               <div>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">Map Location</p>
-                <MapComponent
-                  coordinates={coordinates}
-                  setCoordinates={setCoordinates}
-                  address={post.location}
-                  setAddress={() => {}}
-                  interactive={false}
-                />
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Location</p>
+                    <p className="font-medium mt-1 truncate">{post.location}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowMap(prev => !prev)}
+                    className="flex items-center text-[#57068B] hover:text-[#6A0BA7] transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#57068B] focus:ring-opacity-50 rounded-md px-3 py-1.5"
+                  >
+                    <span className="mr-1">{showMap ? 'Hide Map' : 'Show Map'}</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className={`h-4 w-4 transform transition-transform ${showMap ? 'rotate-180' : ''}`}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+                {showMap && (
+                  <div className="h-64 w-full rounded-lg overflow-hidden border border-gray-200 mb-4">
+                    <MapComponent
+                      coordinates={coordinates}
+                      setCoordinates={setCoordinates}
+                      address={post.location}
+                      setAddress={() => {}}
+                      interactive={false}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             
@@ -111,7 +126,7 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
             <div className="mt-6 space-x-3 flex justify-end">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                className="px-4 py-2 rounded-md text-[#57068B] hover:text-[#6A0BA7] border border-[#57068B] hover:bg-[#57068B]/5 transition-colors"
               >
                 Cancel
               </button>
@@ -119,10 +134,10 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
               <button
                 onClick={onClaim}
                 disabled={isOwnPost}
-                className={`px-4 py-2 rounded-md ${
+                className={`px-4 py-2 rounded-md text-white transition-colors ${
                   isOwnPost
                     ? 'bg-gray-300 cursor-not-allowed'
-                    : 'bg-[#550688] text-white hover:bg-opacity-90'
+                    : 'bg-[#57068B] hover:bg-[#6A0BA7]'
                 }`}
               >
                 {isOwnPost ? 'Cannot claim own post' : 'Start Chat'}

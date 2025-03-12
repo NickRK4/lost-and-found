@@ -48,7 +48,7 @@ export default function PostCard({ post }: PostCardProps) {
         <div className="pt-2">
           <Link
             href={`/chat/${post.id}`}
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium sm:text-base"
+            className="inline-flex items-center gap-2 text-var(--primary) hover:text-var(--primary-dark) text-sm font-medium sm:text-base"
           >
             <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             <span>Contact about this item</span>

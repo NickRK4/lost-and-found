@@ -19,19 +19,6 @@ interface ChatData {
   }
 }
 
-interface RawChatData {
-  id: string
-  post: {
-    title: string
-    image_url: string
-  }[]
-  creator: {
-    username: string
-  }[]
-  claimer: {
-    username: string
-  }[]
-}
 
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
