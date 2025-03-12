@@ -1,14 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import ChatList from './ChatList'
 
 export default function Navbar() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const router = useRouter()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
@@ -58,28 +56,6 @@ export default function Navbar() {
           }
         }
       `}</style>
-
-      {/* Mobile menu button */}
-      <button
-        className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
-        onClick={() => setIsMenuOpen(!isMenuOpen)}
-      >
-        <Menu className="w-6 h-6" />
-      </button>
-
-      {/* Mobile menu */}
-      {isMenuOpen && (
-        <div className="md:hidden">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link
-              href="/chats"
-              className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-            >
-              Messages
-            </Link>
-          </div>
-        </div>
-      )}
 
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
         <button

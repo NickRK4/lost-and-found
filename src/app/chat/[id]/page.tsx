@@ -19,6 +19,29 @@ interface ChatData {
   }
 }
 
+interface SupabaseChatData {
+  id: string
+  post_id: string
+  creator_id: string
+  claimer_id: string
+  posts: {
+    title: string
+    image_url: string
+  } | {
+    title: string
+    image_url: string
+  }[]
+  creator: {
+    username: string
+  } | {
+    username: string
+  }[]
+  claimer: {
+    username: string
+  } | {
+    username: string
+  }[]
+}
 
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -31,14 +54,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .from('chats')
         .select(`
           id,
-          post:posts (
+          post_id,
+          creator_id,
+          claimer_id,
+          posts:posts!post_id (
             title,
             image_url
           ),
-          creator:creator_id (
+          creator:users!creator_id (
             username
           ),
-          claimer:claimer_id (
+          claimer:users!claimer_id (
             username
           )
         `)
@@ -51,11 +77,33 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         return
       }
 
+      // Extract post data (could be an array or a single object)
+      const postData = Array.isArray(data.posts) && data.posts.length > 0
+        ? data.posts[0]
+        : (data.posts as any) || { title: 'Unknown Post', image_url: '' }
+      
+      // Extract creator data
+      const creatorData = Array.isArray(data.creator) && data.creator.length > 0
+        ? data.creator[0]
+        : (data.creator as any) || { username: 'Unknown User' }
+      
+      // Extract claimer data
+      const claimerData = Array.isArray(data.claimer) && data.claimer.length > 0
+        ? data.claimer[0]
+        : (data.claimer as any) || { username: 'Unknown User' }
+
       const formattedChat: ChatData = {
         id: data.id,
-        post: data.post[0] || { title: 'Unknown Post', image_url: '' },
-        creator: data.creator[0] || { username: 'Unknown User' },
-        claimer: data.claimer[0] || { username: 'Unknown User' }
+        post: {
+          title: postData.title || 'Unknown Post',
+          image_url: postData.image_url || ''
+        },
+        creator: {
+          username: creatorData.username || 'Unknown User'
+        },
+        claimer: {
+          username: claimerData.username || 'Unknown User'
+        }
       }
 
       setChat(formattedChat)

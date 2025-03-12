@@ -28,6 +28,8 @@ interface Post {
   status: 'active' | 'claimed' | 'resolved'
   latitude: number
   longitude: number
+  claimer_id?: string
+  claimer: {username : string} | null
 }
 
 export default function Home() {
@@ -53,17 +55,16 @@ export default function Home() {
   const fetchPosts = async () => {
     setLoading(true)
     try {
+      // First, get all posts with basic user info
       const { data, error } = await supabase
         .from('posts')
         .select(`
           *,
           username:users!user_id (username)
         `)
-        .eq('status', 'active')
         .order('created_at', { ascending: false })
 
       if (error) {
-        // eslint-disable-next-line no-console
         console.error('Fetch error:', error)
         throw error
       }
@@ -83,15 +84,32 @@ export default function Home() {
           case '7days':
             return diffDays <= 7
           case 'older':
-            return diffDays > 7
+            return true
           default:
             return true
         }
       })
       
-      setPosts(filteredPosts)
+      // For each post, get claimer info if it exists
+      const postsWithClaimers = await Promise.all(
+        filteredPosts.map(async (post) => {
+          if (post.claimer_id) {
+            const { data: claimer } = await supabase
+              .from('users')
+              .select('username')
+              .eq('id', post.claimer_id)
+              .single()
+            return {
+              ...post,
+              claimer: claimer || null
+            }
+          }
+          return post
+        })
+      )
+      
+      setPosts(postsWithClaimers)
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error fetching posts:', error)
     } finally {
       setLoading(false)
@@ -143,7 +161,6 @@ export default function Home() {
         router.push(`/chat/${newChat.id}`)
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error starting chat:', error)
     }
   }
@@ -166,7 +183,6 @@ export default function Home() {
       // Refresh posts
       fetchPosts()
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error claiming item:', error)
     }
   }
@@ -184,7 +200,7 @@ export default function Home() {
           case '7days':
             return diffDays <= 7
           case 'older':
-            return diffDays > 7
+            return true
           default:
             return true
         }
@@ -261,7 +277,7 @@ export default function Home() {
         </div>
         <div className="flex space-x-4">
           {/* Posts Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-5 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-4 w-full justify-items-center">
             {loading ? (
               <p className="text-white">Loading...</p>
             ) : filteredPosts.length === 0 ? (
@@ -270,16 +286,16 @@ export default function Home() {
               filteredPosts.map((post) => (
                 <div
                   key={post.id}
-                  ref={postCardRef}
                   className="bg-white rounded-lg shadow-md overflow-hidden w-full"
-                  style={{ minWidth: postCardWidth }}
+                  style={{ maxWidth: "300px" }}
                 >
-                  <div className="relative h-64">
+                  <div className="relative h-48 w-full">
                     <Image
                       src={post.image_url}
                       alt={post.title}
                       fill
                       className="object-cover"
+                      onClick={() => setExpandedImage(post.image_url)}
                     />
                   </div>
                   <div className="p-4">
@@ -315,18 +331,40 @@ export default function Home() {
                         />
                       </div>
                     )}
-                    <p className="text-gray-500 text-sm mb-4">{post.description}</p>
-                    <button
-                      onClick={() => setSelectedPost(post)}
-                      disabled={post.user_id === currentUserId}
-                      className={`w-full px-4 py-2 rounded-md ${
-                        post.user_id === currentUserId
-                          ? 'bg-gray-300 cursor-not-allowed'
-                          : 'bg-[#57068B] text-white hover:bg-[#6A0BA7]'
-                      }`}
-                    >
-                      {post.user_id === currentUserId ? 'Your Post' : 'Claim Item'}
-                    </button>
+                    <p className="text-gray-500 text-sm mb-4 line-clamp-2">{post.description}</p>
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-sm text-gray-500">{post.username}</span>
+                      <span className="text-sm text-gray-500">{new Date(post.created_at).toLocaleDateString()}</span>
+                    </div>
+                    {post.user_id === currentUserId ? (
+                      <button
+                        disabled
+                        className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
+                      >
+                        Your Post
+                      </button>
+                    ) : post.status === 'claimed' && post.claimer_id === currentUserId ? (
+                      <button
+                        onClick={() => handleStartChat(post.id, post.user_id)}
+                        className="w-full px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-700"
+                      >
+                        Open Chat
+                      </button>
+                    ) : post.status === 'claimed' ? (
+                      <button
+                        disabled
+                        className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
+                      >
+                        Cannot Claim
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setSelectedPost(post)}
+                        className="w-full px-4 py-2 rounded-md bg-[#57068B] text-white hover:bg-[#6A0BA7]"
+                      >
+                        Claim Item
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

@@ -23,6 +23,36 @@ interface Chat {
   }[]
 }
 
+interface SupabaseChat {
+  id: string
+  post_id: string
+  creator_id: string
+  claimer_id: string
+  posts: {
+    title: string
+  } | {
+    title: string
+  }[]
+  creator: {
+    id: string
+    username: string
+  } | {
+    id: string
+    username: string
+  }[]
+  claimer: {
+    id: string
+    username: string
+  } | {
+    id: string
+    username: string
+  }[]
+  messages: {
+    content: string
+    created_at: string
+  }[]
+}
+
 export default function ChatList({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,14 +65,17 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
           .from('chats')
           .select(`
             id,
-            post:posts (
+            post_id,
+            creator_id,
+            claimer_id,
+            posts:posts!post_id (
               title
             ),
-            creator:creator_id (
+            creator:users!creator_id (
               id,
               username
             ),
-            claimer:claimer_id (
+            claimer:users!claimer_id (
               id,
               username
             ),
@@ -57,13 +90,38 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
         if (error) throw error
 
         if (data) {
-          const formattedChats: Chat[] = data.map((chat: { id: string; post: { title: string }[]; creator: { id: string; username: string }[]; claimer: { id: string; username: string }[]; messages: { content: string; created_at: string }[] }) => ({
-            id: chat.id,
-            post: chat.post[0] || { title: 'Unknown Post' },
-            creator: chat.creator[0] || { id: '', username: 'Unknown User' },
-            claimer: chat.claimer[0] || { id: '', username: 'Unknown User' },
-            messages: chat.messages || []
-          }))
+          const formattedChats: Chat[] = (data as SupabaseChat[]).map((chat) => {
+            // Extract post data (could be an array or a single object)
+            const postData = Array.isArray(chat.posts) && chat.posts.length > 0
+              ? chat.posts[0]
+              : (chat.posts as any) || { title: 'Unknown Post' }
+            
+            // Extract creator data
+            const creatorData = Array.isArray(chat.creator) && chat.creator.length > 0
+              ? chat.creator[0]
+              : (chat.creator as any) || { id: '', username: 'Unknown User' }
+            
+            // Extract claimer data
+            const claimerData = Array.isArray(chat.claimer) && chat.claimer.length > 0
+              ? chat.claimer[0]
+              : (chat.claimer as any) || { id: '', username: 'Unknown User' }
+            
+            return {
+              id: chat.id,
+              post: {
+                title: postData.title || 'Unknown Post'
+              },
+              creator: {
+                id: creatorData.id || '',
+                username: creatorData.username || 'Unknown User'
+              },
+              claimer: {
+                id: claimerData.id || '',
+                username: claimerData.username || 'Unknown User'
+              },
+              messages: chat.messages || []
+            }
+          })
           setChats(formattedChats)
         }
       } catch (error) {

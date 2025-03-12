@@ -9,126 +9,222 @@ import { formatDistanceToNow } from 'date-fns'
 interface Chat {
   id: string
   post_id: string
+  creator_id: string
+  claimer_id: string
   last_message?: string
   last_message_time?: string
   post: {
     id: string
+    title: string
     image_url: string
     description: string
     created_at: string
   }
+  creator: {
+    username: string
+  }
+  claimer: {
+    username: string
+  }
+}
+
+interface SupabaseChat {
+  id: string
+  post_id: string
+  creator_id: string
+  claimer_id: string
+  posts: {
+    id: string
+    title: string
+    image_url: string
+    description: string
+    created_at: string
+  } | {
+    id: string
+    title: string
+    image_url: string
+    description: string
+    created_at: string
+  }[]
+  creator: {
+    username: string
+  } | {
+    username: string
+  }[]
+  claimer: {
+    username: string
+  } | {
+    username: string
+  }[]
 }
 
 export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchChats()
-  }, [])
-
   const fetchChats = async () => {
     try {
+      const userId = localStorage.getItem('user_id')
+      if (!userId) return
+
+      // Get all chats with related data in a single query
       const { data, error } = await supabase
         .from('chats')
         .select(`
           id,
           post_id,
-          posts!inner (
-            id,
-            image_url,
-            description,
+          creator_id,
+          claimer_id,
+          posts:posts!post_id (
+            id, 
+            title, 
+            image_url, 
+            description, 
             created_at
           ),
-          messages (
-            content,
-            created_at
+          creator:users!creator_id (
+            username
+          ),
+          claimer:users!claimer_id (
+            username
           )
         `)
-        .order('created_at', { foreignTable: 'messages', ascending: false })
+        .or(`creator_id.eq.${userId},claimer_id.eq.${userId}`)
+        .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Error fetching chats:', error.message, error.details)
+        return
+      }
 
-      // Safely type and transform the data
-      const formattedChats: Chat[] = (data || []).map((chat: any) => ({
-        id: chat.id,
-        post_id: chat.post_id,
-        last_message: chat.messages?.[0]?.content || undefined,
-        last_message_time: chat.messages?.[0]?.created_at || undefined,
-        post: {
-          id: chat.posts.id,
-          image_url: chat.posts.image_url,
-          description: chat.posts.description,
-          created_at: chat.posts.created_at
+      if (!data || data.length === 0) {
+        setChats([])
+        setLoading(false)
+        return
+      }
+
+      // Get latest messages for each chat in parallel
+      const chatsWithMessages = await Promise.all((data as SupabaseChat[]).map(async (chat) => {
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('content, created_at')
+          .eq('chat_id', chat.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (messagesError) {
+          console.error('Error fetching messages:', messagesError)
+        }
+
+        // Extract the post data (it comes as an array with one object or as a single object)
+        const postData = Array.isArray(chat.posts) && chat.posts.length > 0
+          ? chat.posts[0]
+          : (chat.posts as any) || { id: '', title: 'Unknown Post', image_url: '', description: '', created_at: new Date().toISOString() }
+        
+        // Extract the user data (it comes as an array with one object or as a single object)
+        const creatorData = Array.isArray(chat.creator) && chat.creator.length > 0
+          ? chat.creator[0]
+          : (chat.creator as any) || { username: 'Unknown User' }
+        
+        const claimerData = Array.isArray(chat.claimer) && chat.claimer.length > 0
+          ? chat.claimer[0]
+          : (chat.claimer as any) || { username: 'Unknown User' }
+
+        return {
+          id: chat.id,
+          post_id: chat.post_id,
+          creator_id: chat.creator_id,
+          claimer_id: chat.claimer_id,
+          last_message: messagesData?.[0]?.content,
+          last_message_time: messagesData?.[0]?.created_at,
+          post: {
+            id: postData.id || '',
+            title: postData.title || 'Unknown Post',
+            image_url: postData.image_url || '',
+            description: postData.description || '',
+            created_at: postData.created_at || new Date().toISOString()
+          },
+          creator: {
+            username: creatorData.username || 'Unknown User'
+          },
+          claimer: {
+            username: claimerData.username || 'Unknown User'
+          }
         }
       }))
 
-      setChats(formattedChats)
+      setChats(chatsWithMessages)
     } catch (error) {
-      console.error('Error fetching chats:', error)
+      console.error('Error in fetchChats:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    fetchChats()
+  }, [])
+
   if (loading) {
     return (
-      <div className="p-4">
-        <p className="text-gray-500">Loading chats...</p>
+      <div className="p-4 text-center">
+        <p>Loading chats...</p>
       </div>
     )
   }
 
-  if (chats.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-4 text-center text-gray-500">
-        <MessageSquare className="w-8 h-8 mb-2" />
-        <p>No chats yet</p>
-        <p className="text-sm">Start a conversation by clicking "Contact" on a post</p>
-      </div>
-    )
-  }
+  const currentUserId = localStorage.getItem('user_id')
 
   return (
     <div className="h-full">
       <div className="p-4 border-b">
-        <h2 className="font-semibold">Messages</h2>
+        <h2 className="text-lg font-semibold">Messages</h2>
       </div>
       <div className="overflow-y-auto h-[calc(100%-57px)]">
-        {chats.map((chat) => (
-          <a
-            key={chat.id}
-            href={`/chat/${chat.post_id}`}
-onClick={() => onClose?.()}
-            className="flex items-start gap-3 p-4 hover:bg-gray-50 border-b transition-colors"
-          >
-            <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0">
-              <Image
-                src={chat.post.image_url}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="56px"
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start gap-2">
-                <p className="text-sm font-medium line-clamp-1">
-                  {chat.post.description}
-                </p>
-                <p className="text-xs text-gray-500 whitespace-nowrap">
-                  {chat.last_message_time && 
-                    formatDistanceToNow(new Date(chat.last_message_time), { addSuffix: true })}
-                </p>
+        {chats.map((chat) => {
+          const isCreator = chat.creator_id === currentUserId
+          const otherUser = isCreator ? chat.claimer : chat.creator
+
+          return (
+            <a
+              key={chat.id}
+              href={`/chat/${chat.id}`}
+              onClick={() => onClose?.()}
+              className="flex items-start gap-3 p-4 hover:bg-gray-50 border-b transition-colors"
+            >
+              <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0">
+                <Image
+                  src={chat.post.image_url}
+                  alt={chat.post.title}
+                  fill
+                  className="object-cover"
+                  sizes="56px"
+                />
               </div>
-              {chat.last_message && (
-                <p className="text-sm text-gray-500 line-clamp-1 mt-1">
-                  {chat.last_message}
-                </p>
-              )}
-            </div>
-          </a>
-        ))}
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <p className="text-sm font-medium line-clamp-1">
+                      {chat.post.title || chat.post.description}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      with {otherUser.username}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 whitespace-nowrap">
+                    {chat.last_message_time && 
+                      formatDistanceToNow(new Date(chat.last_message_time), { addSuffix: true })}
+                  </p>
+                </div>
+                {chat.last_message && (
+                  <p className="text-sm text-gray-500 line-clamp-1 mt-1">
+                    {chat.last_message}
+                  </p>
+                )}
+              </div>
+            </a>
+          )
+        })}
       </div>
     </div>
   )

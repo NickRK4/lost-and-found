@@ -51,7 +51,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             content,
             created_at,
             user_id,
-            sender:users (
+            sender:users!user_id (
               username
             )
           `)
@@ -64,13 +64,22 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
         }
 
         if (messagesData) {
-          const formattedMessages: Message[] = (messagesData as RawMessage[]).map(msg => ({
-            id: msg.id,
-            content: msg.content,
-            created_at: msg.created_at,
-            user_id: msg.user_id,
-            sender: msg.sender[0] || { username: 'Unknown User' }
-          }))
+          const formattedMessages: Message[] = (messagesData as RawMessage[]).map(msg => {
+            // Extract sender data (could be an array or a single object)
+            const senderData = Array.isArray(msg.sender) && msg.sender.length > 0
+              ? msg.sender[0]
+              : (msg.sender as any) || { username: 'Unknown User' }
+            
+            return {
+              id: msg.id,
+              content: msg.content,
+              created_at: msg.created_at,
+              user_id: msg.user_id,
+              sender: {
+                username: senderData.username || 'Unknown User'
+              }
+            }
+          })
           setMessages(formattedMessages)
         }
         setLoading(false)
@@ -103,7 +112,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               content,
               created_at,
               user_id,
-              sender:users (
+              sender:users!user_id (
                 username
               )
             `)
@@ -116,12 +125,19 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
           }
 
           if (newMessageData) {
+            // Extract sender data
+            const senderData = Array.isArray(newMessageData.sender) && newMessageData.sender.length > 0
+              ? newMessageData.sender[0]
+              : (newMessageData.sender as any) || { username: 'Unknown User' }
+            
             const formattedMessage: Message = {
               id: newMessageData.id,
               content: newMessageData.content,
               created_at: newMessageData.created_at,
               user_id: newMessageData.user_id,
-              sender: (newMessageData as RawMessage).sender[0] || { username: 'Unknown User' }
+              sender: {
+                username: senderData.username || 'Unknown User'
+              }
             }
             setMessages(prev => [...prev, formattedMessage])
             scrollToBottom()
