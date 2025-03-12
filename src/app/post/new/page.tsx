@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import dynamic from 'next/dynamic';
+
+// Dynamically import the MapComponent
+const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false });
 
 export default function NewPost() {
   const router = useRouter()
@@ -12,6 +16,7 @@ export default function NewPost() {
   const [image, setImage] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [coordinates, setCoordinates] = useState<[number, number]>([51.505, -0.09])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,9 +95,16 @@ export default function NewPost() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-6">Post Lost/Found Item</h2>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="mb-4 px-4 py-2 bg-[#550688] text-white rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#550688]"
+        >
+          Back
+        </button>
+        <h2 className="text-2xl font-bold mb-6 text-gray-900">Post Lost/Found Item</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -138,6 +150,19 @@ export default function NewPost() {
           </div>
 
           <div>
+            <label htmlFor="map" className="block text-sm font-medium text-gray-700">
+              Map Location
+            </label>
+            <MapComponent
+              coordinates={coordinates}
+              setCoordinates={setCoordinates}
+              address={location}
+              setAddress={setLocation}
+              interactive={true}
+            />
+          </div>
+
+          <div>
             <label htmlFor="image" className="block text-sm font-medium text-gray-700">
               Image
             </label>
@@ -158,7 +183,7 @@ export default function NewPost() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#550688] hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#550688]"
           >
             {loading ? 'Posting...' : 'Post Item'}
           </button>
