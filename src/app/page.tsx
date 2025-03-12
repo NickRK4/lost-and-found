@@ -54,6 +54,9 @@ export default function Home() {
 
   const fetchPosts = async () => {
     setLoading(true)
+    setPosts([]) // Clear posts immediately to avoid showing stale data
+    setFilteredPosts([]) // Clear filtered posts as well
+    
     try {
       // First, get all posts with basic user info
       const { data, error } = await supabase
@@ -109,6 +112,7 @@ export default function Home() {
       )
       
       setPosts(postsWithClaimers)
+      setFilteredPosts(postsWithClaimers) // Set filtered posts directly after fetching
     } catch (error) {
       console.error('Error fetching posts:', error)
     } finally {
@@ -189,33 +193,18 @@ export default function Home() {
 
   const debouncedSearch = useCallback(
     debounce((query: string) => {
-      const now = new Date()
-      const filteredByTime = posts.filter(post => {
-        const postDate = new Date(post.created_at)
-        const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24)
-        
-        switch (timeRange) {
-          case '1day':
-            return diffDays <= 1
-          case '7days':
-            return diffDays <= 7
-          case 'older':
-            return true
-          default:
-            return true
-        }
-      })
-
+      if (!posts.length) return; // Don't run if posts haven't loaded yet
+      
       const searchFiltered = query
-        ? filteredByTime.filter(post =>
+        ? posts.filter(post =>
             post.title.toLowerCase().includes(query.toLowerCase()) ||
             post.description.toLowerCase().includes(query.toLowerCase())
           )
-        : filteredByTime
+        : posts
 
       setFilteredPosts(searchFiltered)
     }, 300),
-    [posts, timeRange]
+    [posts]
   )
 
   useEffect(() => {
@@ -223,7 +212,7 @@ export default function Home() {
     return () => {
       debouncedSearch.cancel()
     }
-  }, [searchQuery, debouncedSearch])
+  }, [searchQuery, debouncedSearch, posts])
 
   const handleImageClick = (imageUrl: string) => {
     setExpandedImage(imageUrl)
@@ -279,9 +268,16 @@ export default function Home() {
           {/* Posts Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-4 w-full justify-items-center">
             {loading ? (
-              <p className="text-white">Loading...</p>
+              <div className="col-span-full flex justify-center items-center">
+                <div className="text-white text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mx-auto mb-2"></div>
+                  <p>Loading posts...</p>
+                </div>
+              </div>
             ) : filteredPosts.length === 0 ? (
-              <p className="text-white">No posts found</p>
+              <div className="col-span-full text-center text-white">
+                <p>No posts found</p>
+              </div>
             ) : (
               filteredPosts.map((post) => (
                 <div
