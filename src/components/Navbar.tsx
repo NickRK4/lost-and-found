@@ -7,25 +7,9 @@ import Image from 'next/image'
 import ChatList from './ChatList'
 
 export default function Navbar() {
-  const [darkMode, setDarkMode] = useState(false)
   const router = useRouter()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showChatMenu, setShowChatMenu] = useState(false)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme) {
-      setDarkMode(savedTheme === 'dark')
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark')
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode)
-    const newTheme = !darkMode ? 'dark' : 'light'
-    document.documentElement.classList.toggle('dark', !darkMode)
-    localStorage.setItem('theme', newTheme)
-  }
 
   const handleClickOutside = (e: MouseEvent) => {
     const target = e.target as HTMLElement
@@ -42,7 +26,7 @@ export default function Navbar() {
   }, [showProfileMenu])
 
   return (
-    <nav className="border-b bg-white dark:bg-gray-800">
+    <nav className="border-b bg-white">
       <style jsx>{`
         @keyframes gradient {
           0% {
@@ -94,20 +78,6 @@ export default function Navbar() {
           >
             Post Item
           </button>
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center justify-center"
-          >
-            {darkMode ? (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
-              </svg>
-            )}
-          </button>
           <div className="relative ml-4 flex items-center">
             <button
               onClick={(e) => {
@@ -151,28 +121,21 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Chat Menu */}
       {showChatMenu && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowChatMenu(false)} />
-          <div className="fixed inset-y-0 left-0 max-w-md w-full bg-white shadow-xl">
-            <div className="h-full flex flex-col py-6 bg-white shadow-xl">
-              <div className="px-4 sm:px-6 flex justify-between items-center">
-                <h2 className="text-lg font-medium text-gray-900">Messages</h2>
-                <button
-                  onClick={() => setShowChatMenu(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <span className="sr-only">Close panel</span>
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="mt-6 relative flex-1 px-4 sm:px-6 overflow-y-auto">
-                <ChatList onClose={() => setShowChatMenu(false)} />
-              </div>
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex">
+          <div className="bg-white dark:bg-gray-800 w-80 h-full overflow-y-auto shadow-lg">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">Messages</h2>
+              <button
+                onClick={() => setShowChatMenu(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
+            <ChatList />
           </div>
         </div>
       )}

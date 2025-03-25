@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
@@ -28,14 +28,6 @@ export default function AuthPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-
-  useEffect(() => {
-    // Check if user is already logged in
-    const userId = localStorage.getItem('user_id')
-    if (userId) {
-      router.push('/')
-    }
-  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -98,7 +90,7 @@ export default function AuthPage() {
 
         localStorage.setItem('user_id', userId)
         localStorage.setItem('username', cleanUsername)
-        router.push('/')
+        router.push('/dashboard')
       }
     } catch (error: unknown) {
       if (error instanceof Error) {

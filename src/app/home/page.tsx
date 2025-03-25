@@ -5,33 +5,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 export default function HomePage() {
-  const [darkMode, setDarkMode] = useState(false)
-
-  useEffect(() => {
-    // Check for saved theme preference in localStorage
-    const savedTheme = localStorage.getItem('theme')
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-      setDarkMode(true)
-      document.documentElement.classList.add('dark')
-    } else {
-      setDarkMode(false)
-      document.documentElement.classList.remove('dark')
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode)
-    if (darkMode) {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    } else {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
-    }
-  }
-
   const reviews = [
     {
       id: 1,
@@ -57,9 +30,9 @@ export default function HomePage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50">
+      {/* Logo Only Header */}
+      <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -69,59 +42,16 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
-            <div className="flex items-center">
-              <button
-                onClick={toggleDarkMode}
-                className="p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#57068B]"
-              >
-                {darkMode ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                )}
-              </button>
-            </div>
           </div>
         </div>
       </header>
 
-      {/* Banner Navigation */}
-      <div className="bg-[#57068B] text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-14">
-            <div className="flex space-x-8">
-              <Link
-                href="/about"
-                className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-white/70 hover:text-white hover:border-white/70"
-              >
-                FAQ
-              </Link>
-              <button
-                className="inline-flex items-center px-1 pt-1 border-b-2 border-white text-sm font-medium text-white"
-              >
-                Home
-              </button>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-white/70 hover:text-white hover:border-white/70"
-              >
-                Dashboard
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Hero Section */}
-      <div className="relative bg-white dark:bg-gray-800 overflow-hidden transition-colors duration-200">
+      <div className="relative bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto">
-          <div className="relative z-10 pb-8 bg-white dark:bg-gray-800 sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32 transition-colors duration-200">
+          <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
             <svg
-              className="hidden lg:block absolute right-0 inset-y-0 h-full w-48 text-white dark:text-gray-800 transform translate-x-1/2 transition-colors duration-200"
+              className="hidden lg:block absolute right-0 inset-y-0 h-full w-48 text-white transform translate-x-1/2"
               fill="currentColor"
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
@@ -132,11 +62,11 @@ export default function HomePage() {
 
             <main className="pt-10 mx-auto max-w-7xl px-4 sm:pt-12 sm:px-6 md:pt-16 lg:pt-20 lg:px-8 xl:pt-28">
               <div className="sm:text-center lg:text-left">
-                <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 dark:text-white sm:text-5xl md:text-6xl transition-colors duration-200">
+                <h1 className="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
                   <span className="block xl:inline">Reunite with your</span>{' '}
                   <span className="block text-[#57068B] xl:inline">lost treasures</span>
                 </h1>
-                <p className="mt-3 text-base text-gray-500 dark:text-gray-300 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0 transition-colors duration-200">
+                <p className="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
                   Lost&Found connects people who have lost items with those who have found them. Our platform makes it easy to post found items, search for lost possessions, and connect with the right person to get your valuables back.
                 </p>
                 <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
@@ -151,7 +81,7 @@ export default function HomePage() {
                   <div className="mt-3 sm:mt-0 sm:ml-3">
                     <Link
                       href="/about"
-                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-[#57068B] bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
+                      className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-[#57068B] bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10"
                     >
                       Learn More
                     </Link>
@@ -171,14 +101,14 @@ export default function HomePage() {
       </div>
 
       {/* Service Description */}
-      <div className="py-12 bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+      <div className="py-12 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="lg:text-center">
             <h2 className="text-base text-[#57068B] font-semibold tracking-wide uppercase">Our Service</h2>
-            <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-4xl transition-colors duration-200">
+            <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
               How Lost&Found Works
             </p>
-            <p className="mt-4 max-w-2xl text-xl text-gray-500 dark:text-gray-300 lg:mx-auto transition-colors duration-200">
+            <p className="mt-4 max-w-2xl text-xl text-gray-500 lg:mx-auto">
               A simple three-step process to reunite people with their lost items.
             </p>
           </div>
@@ -192,8 +122,8 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="mt-5 text-center">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white transition-colors duration-200">Post Found Items</h3>
-                  <p className="mt-2 text-base text-gray-500 dark:text-gray-300 transition-colors duration-200">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">Post Found Items</h3>
+                  <p className="mt-2 text-base text-gray-500">
                     Found something? Take a photo, add details about where you found it, and post it to our platform.
                   </p>
                 </div>
@@ -206,8 +136,8 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="mt-5 text-center">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white transition-colors duration-200">Search & Match</h3>
-                  <p className="mt-2 text-base text-gray-500 dark:text-gray-300 transition-colors duration-200">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">Search & Match</h3>
+                  <p className="mt-2 text-base text-gray-500">
                     Lost something? Search our database of found items or post a lost item alert. Our system helps match lost items with found ones.
                   </p>
                 </div>
@@ -220,8 +150,8 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="mt-5 text-center">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white transition-colors duration-200">Connect & Retrieve</h3>
-                  <p className="mt-2 text-base text-gray-500 dark:text-gray-300 transition-colors duration-200">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">Connect & Retrieve</h3>
+                  <p className="mt-2 text-base text-gray-500">
                     Connect securely through our chat system to arrange the return of lost items. Rate your experience afterward.
                   </p>
                 </div>
@@ -232,14 +162,14 @@ export default function HomePage() {
       </div>
 
       {/* Success Stories */}
-      <div className="py-12 bg-white dark:bg-gray-800 transition-colors duration-200">
+      <div className="py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="lg:text-center">
             <h2 className="text-base text-[#57068B] font-semibold tracking-wide uppercase">Success Stories</h2>
-            <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-4xl transition-colors duration-200">
+            <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
               Hear from our users
             </p>
-            <p className="mt-4 max-w-2xl text-xl text-gray-500 dark:text-gray-300 lg:mx-auto transition-colors duration-200">
+            <p className="mt-4 max-w-2xl text-xl text-gray-500 lg:mx-auto">
               Real stories from people who have successfully reunited with their lost items.
             </p>
           </div>
@@ -247,7 +177,7 @@ export default function HomePage() {
           <div className="mt-10">
             <div className="space-y-8 md:space-y-0 md:grid md:grid-cols-3 md:gap-x-8 md:gap-y-10">
               {reviews.map((review) => (
-                <div key={review.id} className="bg-gray-50 dark:bg-gray-700 p-6 rounded-lg shadow-md transition-colors duration-200">
+                <div key={review.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
                   <div className="flex items-center mb-4">
                     <div className="relative h-12 w-12 rounded-full overflow-hidden">
                       <Image
@@ -259,11 +189,11 @@ export default function HomePage() {
                       />
                     </div>
                     <div className="ml-4">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white transition-colors duration-200">{review.name}</h3>
+                      <h3 className="text-lg font-medium text-gray-900">{review.name}</h3>
                       <p className="text-sm text-[#57068B]">Found: {review.item}</p>
                     </div>
                   </div>
-                  <p className="text-gray-600 dark:text-gray-300 transition-colors duration-200">{review.review}</p>
+                  <p className="text-gray-600">{review.review}</p>
                 </div>
               ))}
             </div>
@@ -292,12 +222,12 @@ export default function HomePage() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 transition-colors duration-200">
+      <footer className="bg-white">
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
           <div className="xl:grid xl:grid-cols-3 xl:gap-8">
             <div className="space-y-8 xl:col-span-1">
               <div className="text-2xl font-bold text-[#57068B]">Lost&Found</div>
-              <p className="text-gray-500 dark:text-gray-300 text-base transition-colors duration-200">
+              <p className="text-gray-500 text-base">
                 Helping people reconnect with their lost items since 2023.
               </p>
               <div className="flex space-x-6">
@@ -327,17 +257,17 @@ export default function HomePage() {
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Solutions</h3>
                   <ul className="mt-4 space-y-4">
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Lost Items
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Found Items
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Success Stories
                       </a>
                     </li>
@@ -347,17 +277,17 @@ export default function HomePage() {
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Support</h3>
                   <ul className="mt-4 space-y-4">
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Help Center
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Contact Us
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Privacy
                       </a>
                     </li>
@@ -369,17 +299,17 @@ export default function HomePage() {
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Company</h3>
                   <ul className="mt-4 space-y-4">
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         About
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Blog
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Careers
                       </a>
                     </li>
@@ -389,12 +319,12 @@ export default function HomePage() {
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Legal</h3>
                   <ul className="mt-4 space-y-4">
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Privacy Policy
                       </a>
                     </li>
                     <li>
-                      <a href="#" className="text-base text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
                         Terms of Service
                       </a>
                     </li>
@@ -403,7 +333,7 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-          <div className="mt-12 border-t border-gray-200 dark:border-gray-700 pt-8 transition-colors duration-200">
+          <div className="mt-12 border-t border-gray-200 pt-8">
             <p className="text-base text-gray-400 text-center">
               &copy; 2023 Lost&Found. All rights reserved.
             </p>
