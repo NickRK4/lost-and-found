@@ -10,7 +10,8 @@ interface Message {
   created_at: string
   user_id: string
   sender: {
-    username: string
+    first_name?: string
+    last_name?: string
   }
 }
 
@@ -20,7 +21,8 @@ interface RawMessage {
   created_at: string
   user_id: string
   sender: {
-    username: string
+    first_name?: string
+    last_name?: string
   }[]
 }
 
@@ -52,7 +54,8 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             created_at,
             user_id,
             sender:users!user_id (
-              username
+              first_name,
+              last_name
             )
           `)
           .eq('chat_id', chatId)
@@ -68,7 +71,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             // Extract sender data (could be an array or a single object)
             const senderData = Array.isArray(msg.sender) && msg.sender.length > 0
               ? msg.sender[0]
-              : (msg.sender as any) || { username: 'Unknown User' }
+              : (msg.sender as any) || { first_name: 'Unknown', last_name: '' }
             
             return {
               id: msg.id,
@@ -76,7 +79,8 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               created_at: msg.created_at,
               user_id: msg.user_id,
               sender: {
-                username: senderData.username || 'Unknown User'
+                first_name: senderData.first_name || '',
+                last_name: senderData.last_name || ''
               }
             }
           })
@@ -113,7 +117,8 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               created_at,
               user_id,
               sender:users!user_id (
-                username
+                first_name,
+                last_name
               )
             `)
             .eq('id', payload.new.id)
@@ -128,7 +133,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             // Extract sender data
             const senderData = Array.isArray(newMessageData.sender) && newMessageData.sender.length > 0
               ? newMessageData.sender[0]
-              : (newMessageData.sender as any) || { username: 'Unknown User' }
+              : (newMessageData.sender as any) || { first_name: 'Unknown', last_name: '' }
             
             const formattedMessage: Message = {
               id: newMessageData.id,
@@ -136,7 +141,8 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               created_at: newMessageData.created_at,
               user_id: newMessageData.user_id,
               sender: {
-                username: senderData.username || 'Unknown User'
+                first_name: senderData.first_name || '',
+                last_name: senderData.last_name || ''
               }
             }
             setMessages(prev => [...prev, formattedMessage])
@@ -160,7 +166,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
       content: newMessage.trim(),
       created_at: new Date().toISOString(),
       user_id: currentUserId || '',
-      sender: { username: 'You' }
+      sender: { first_name: 'You', last_name: '' }
     }
 
     // Optimistically add to messages
@@ -208,7 +214,11 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
                 }`}
               >
                 <p className="text-sm font-medium mb-1">
-                  {message.sender.username}
+                  {message.user_id === currentUserId 
+                    ? 'You' 
+                    : message.sender.first_name && message.sender.last_name 
+                      ? `${message.sender.first_name} ${message.sender.last_name}` 
+                      : `${message.sender.first_name || 'Unknown'}`}
                 </p>
                 <p>{message.content}</p>
                 <p className="text-xs mt-1 opacity-75">

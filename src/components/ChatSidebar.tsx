@@ -21,10 +21,12 @@ interface Chat {
     created_at: string
   }
   creator: {
-    username: string
+    first_name?: string
+    last_name?: string
   }
   claimer: {
-    username: string
+    first_name?: string
+    last_name?: string
   }
 }
 
@@ -47,14 +49,18 @@ interface SupabaseChat {
     created_at: string
   }[]
   creator: {
-    username: string
+    first_name?: string
+    last_name?: string
   } | {
-    username: string
+    first_name?: string
+    last_name?: string
   }[]
   claimer: {
-    username: string
+    first_name?: string
+    last_name?: string
   } | {
-    username: string
+    first_name?: string
+    last_name?: string
   }[]
 }
 
@@ -83,10 +89,12 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
             created_at
           ),
           creator:users!creator_id (
-            username
+            first_name,
+            last_name
           ),
           claimer:users!claimer_id (
-            username
+            first_name,
+            last_name
           )
         `)
         .or(`creator_id.eq.${userId},claimer_id.eq.${userId}`)
@@ -124,11 +132,11 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
         // Extract the user data (it comes as an array with one object or as a single object)
         const creatorData = Array.isArray(chat.creator) && chat.creator.length > 0
           ? chat.creator[0]
-          : (chat.creator as any) || { username: 'Unknown User' }
+          : (chat.creator as any) || { first_name: 'Unknown', last_name: '' }
         
         const claimerData = Array.isArray(chat.claimer) && chat.claimer.length > 0
           ? chat.claimer[0]
-          : (chat.claimer as any) || { username: 'Unknown User' }
+          : (chat.claimer as any) || { first_name: 'Unknown', last_name: '' }
 
         return {
           id: chat.id,
@@ -145,10 +153,12 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
             created_at: postData.created_at || new Date().toISOString()
           },
           creator: {
-            username: creatorData.username || 'Unknown User'
+            first_name: creatorData.first_name || 'Unknown',
+            last_name: creatorData.last_name || ''
           },
           claimer: {
-            username: claimerData.username || 'Unknown User'
+            first_name: claimerData.first_name || 'Unknown',
+            last_name: claimerData.last_name || ''
           }
         }
       }))
@@ -208,7 +218,7 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
                       {chat.post.title || chat.post.description}
                     </p>
                     <p className="text-xs text-gray-500">
-                      with {otherUser.username}
+                      with {otherUser.first_name} {otherUser.last_name}
                     </p>
                   </div>
                   <p className="text-xs text-gray-500 whitespace-nowrap">

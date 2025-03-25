@@ -20,12 +20,13 @@ interface Post {
   image_url: string
   created_at: string
   user_id: string
-  username: string
+  first_name: string
+  last_name: string
   status: 'active' | 'claimed' | 'resolved'
   latitude: number
   longitude: number
   claimer_id?: string
-  claimer: {username : string} | null
+  claimer: {first_name?: string, last_name?: string} | null
 }
 
 export default function Dashboard() {
@@ -116,7 +117,7 @@ export default function Dashboard() {
         .from('posts')
         .select(`
           *,
-          username:users!user_id (username)
+          user_info:users!user_id (first_name, last_name)
         `)
         .order('created_at', { ascending: false })
 
@@ -125,14 +126,15 @@ export default function Dashboard() {
         throw error
       }
 
-      // Filter out posts where the user no longer exists (username will be null)
-      const validPosts = (data || []).filter(post => post.username !== null)
+      // Filter out posts where the user no longer exists
+      const validPosts = (data || []).filter(post => post.user_info !== null)
       
       // Filter posts based on time range
       const now = new Date()
       const filteredPosts = validPosts.map(post => ({
         ...post,
-        username: post.username?.username || 'Unknown User'
+        first_name: post.user_info?.first_name || '',
+        last_name: post.user_info?.last_name || ''
       })).filter(post => {
         const postDate = new Date(post.created_at)
         const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -155,7 +157,7 @@ export default function Dashboard() {
           if (post.claimer_id) {
             const { data: claimer } = await supabase
               .from('users')
-              .select('username')
+              .select('first_name, last_name')
               .eq('id', post.claimer_id)
               .single()
             return {
@@ -391,12 +393,22 @@ export default function Dashboard() {
                   </div>
                   <div className="p-4">
                     <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">{post.title}</h3>
-                    <div className="flex items-center mb-2">
+                    <div className="flex flex-col">
+                      <div className="flex items-center mb-1">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                          {post.first_name} {post.last_name}
+                        </span>
+                        {post.claimer && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                            Claimed
+                          </span>
+                        )}
+                      </div>
                       <p className="text-gray-600 dark:text-gray-300 flex-grow truncate">{post.location}</p>
                     </div>
                     <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 line-clamp-2">{post.description}</p>
                     <div className="flex justify-between items-center mb-4">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{post.username}</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{post.first_name} {post.last_name}</span>
                       <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(post.created_at).toLocaleDateString()}</span>
                     </div>
                     {post.user_id === currentUserId ? (

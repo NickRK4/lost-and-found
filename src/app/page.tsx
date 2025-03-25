@@ -116,8 +116,14 @@ export default function MainPage() {
         </div>
         <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2">
           <div className="h-56 w-full bg-[#57068B] sm:h-72 md:h-96 lg:w-full lg:h-full">
-            <div className="h-full w-full flex items-center justify-center text-white text-4xl font-bold">
-              <span>Lost&Found</span>
+            <div className="h-full w-full flex items-center justify-center">
+              <Image 
+                src="/nyu_logo_grey.png" 
+                alt="NYU Logo" 
+                width={240} 
+                height={80} 
+                className="object-contain"
+              />
             </div>
           </div>
         </div>

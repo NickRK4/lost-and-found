@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase'
 
 export default function Profile() {
   const router = useRouter()
-  const [username, setUsername] = useState('')
-  const [newUsername, setNewUsername] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -34,7 +34,7 @@ export default function Profile() {
         // Check if user has a profile in the users table
         const { data: profile, error: profileError } = await supabase
           .from('users')
-          .select('username')
+          .select('first_name, last_name')
           .eq('id', user.id)
           .single()
         
@@ -45,27 +45,41 @@ export default function Profile() {
         }
         
         if (profile) {
-          // If profile exists, set the username
-          setUsername(profile.username || '')
-          setNewUsername(profile.username || '')
+          // If profile exists, set the first and last name
+          setFirstName(profile.first_name || '')
+          setLastName(profile.last_name || '')
         } else {
-          // If no profile exists, create one with default username from email
-          const defaultUsername = user.email ? user.email.split('@')[0] : `user_${Date.now()}`
+          // If no profile exists, create one with names from email
+          const emailPrefix = user.email ? user.email.split('@')[0] : '';
+          // Try to extract first and last name from email prefix (e.g., john.doe@example.com)
+          let defaultFirstName = '';
+          let defaultLastName = '';
+          
+          if (emailPrefix.includes('.')) {
+            const nameParts = emailPrefix.split('.');
+            defaultFirstName = nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1);
+            defaultLastName = nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1);
+          } else {
+            // If no dot in email, use the whole prefix as first name
+            defaultFirstName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+          }
           
           const { error: createError } = await supabase
             .from('users')
             .insert([{ 
               id: user.id,
-              username: defaultUsername,
-              email: user.email
+              user_id: user.id, 
+              email: user.email,
+              first_name: defaultFirstName,
+              last_name: defaultLastName
             }])
           
           if (createError) {
             console.error('Error creating profile:', createError)
             setError('Failed to create profile')
           } else {
-            setUsername(defaultUsername)
-            setNewUsername(defaultUsername)
+            setFirstName(defaultFirstName)
+            setLastName(defaultLastName)
           }
         }
       } catch (error: any) {
@@ -78,36 +92,6 @@ export default function Profile() {
 
     fetchUserProfile()
   }, [router])
-
-  const updateUsername = async () => {
-    if (newUsername === username) return
-    
-    setIsLoading(true)
-    setError('')
-    setSuccess('')
-  
-    try {
-      if (!userId) {
-        throw new Error('User not authenticated')
-      }
-  
-      // Update username
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ username: newUsername })
-        .eq('id', userId)
-  
-      if (updateError) throw updateError
-  
-      setUsername(newUsername)
-      setSuccess('Username updated successfully')
-    } catch (error: any) {
-      console.error('Error updating username:', error.message)
-      setError(error.message || 'Failed to update username')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const signOut = async () => {
     setIsLoading(true)
@@ -200,27 +184,28 @@ export default function Profile() {
               disabled
               className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-[#861397] focus:ring-[#861397] cursor-not-allowed"
             />
-            <p className="mt-1 text-sm text-gray-500">
-              Your email is managed by Google and cannot be changed here
-            </p>
           </div>
 
-          {/* Username Section */}
+          {/* First Name Section (Read-only) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <label className="block text-sm font-medium text-gray-700">First Name</label>
             <input
               type="text"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
+              value={firstName}
+              disabled
+              className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-[#861397] focus:ring-[#861397] cursor-not-allowed"
             />
-            <button
-              onClick={updateUsername}
-              disabled={isLoading || newUsername === username || !newUsername.trim()}
-              className="mt-2 w-full bg-[#861397] text-white py-2 px-4 rounded-md hover:bg-opacity-90 disabled:opacity-50"
-            >
-              Update Username
-            </button>
+          </div>
+
+          {/* Last Name Section (Read-only) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Last Name</label>
+            <input
+              type="text"
+              value={lastName}
+              disabled
+              className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-[#861397] focus:ring-[#861397] cursor-not-allowed"
+            />
           </div>
 
           {/* Sign Out Button */}
@@ -228,13 +213,13 @@ export default function Profile() {
             <button
               onClick={signOut}
               disabled={isLoading}
-              className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-300 disabled:opacity-50"
+              className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 disabled:opacity-50"
             >
               Sign Out
             </button>
           </div>
-
-          {/* Delete Account Section */}
+          
+          {/* Delete Account Button */}
           <div>
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -249,29 +234,35 @@ export default function Profile() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-medium mb-4">Are you sure?</h3>
-            <p className="text-gray-500 mb-4">
-              This action cannot be undone. All your posts and messages will be permanently deleted.
-            </p>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 bg-gray-200 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-300"
-              >
-                Go Back
-              </button>
-              <button
-                onClick={deleteAccount}
-                disabled={isLoading}
-                className="flex-1 bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 disabled:opacity-50"
-              >
-                Delete Account
-              </button>
+        <>
+          {/* Overlay */}
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" />
+          
+          {/* Modal */}
+          <div className="fixed inset-0 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <h3 className="text-xl font-semibold mb-4">Delete Account</h3>
+              <p className="mb-6">
+                Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your posts and messages.
+              </p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 rounded-md text-gray-700 border border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={deleteAccount}
+                  disabled={isLoading}
+                  className="px-4 py-2 rounded-md text-white bg-red-500 hover:bg-red-600 disabled:opacity-50"
+                >
+                  {isLoading ? 'Deleting...' : 'Delete Account'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

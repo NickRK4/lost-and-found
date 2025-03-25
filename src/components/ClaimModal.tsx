@@ -70,7 +70,7 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
             <div className="space-y-4">
               <div>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">Posted by</p>
-                <p className="font-medium">{post.first_name + "" + post.last_name}</p>
+                <p className="font-medium">{post.first_name} {post.last_name}</p>
               </div>
               
               <div>
@@ -142,8 +142,14 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
 
       {/* Fullscreen Map Modal */}
       {showFullScreenMap && (
-        <div className="fixed inset-0 z-[60] bg-black bg-opacity-75 flex items-center justify-center">
-          <div className="bg-white rounded-lg w-[90%] h-[90%] max-w-4xl max-h-[90vh] overflow-hidden relative">
+        <div 
+          className="fixed inset-0 z-[60] bg-black bg-opacity-75 flex items-center justify-center"
+          onClick={() => setShowFullScreenMap(false)} // Close when clicking outside
+        >
+          <div 
+            className="bg-white rounded-lg w-[90%] max-w-4xl h-[70vh] overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking on the map container
+          >
             <div className="absolute top-4 right-4 z-10">
               <button
                 onClick={() => setShowFullScreenMap(false)}

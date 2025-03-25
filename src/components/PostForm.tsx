@@ -32,7 +32,7 @@ export default function PostForm() {
       if (error) throw error
 
       toast.success('Post created successfully!')
-      router.push('/')
+      router.push('/dashboard')
       router.refresh()
     } catch (error) {
       console.error('Error creating post:', error)
