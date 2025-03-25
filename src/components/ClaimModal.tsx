@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { formatDistanceToNow } from 'date-fns'
 import dynamic from 'next/dynamic';
+import { X } from 'lucide-react';
 
 // Dynamically import the MapComponent
 const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false });
@@ -30,6 +31,7 @@ interface ClaimModalProps {
 export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children }: ClaimModalProps) {
   const [coordinates, setCoordinates] = useState<[number, number]>([51.505, -0.09]);
   const [showMap, setShowMap] = useState(false);
+  const [showFullScreenMap, setShowFullScreenMap] = useState(false);
 
   useEffect(() => {
     // Set coordinates from post if available
@@ -94,13 +96,13 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
                     <p className="font-medium mt-1 truncate">{post.location}</p>
                   </div>
                   <button
-                    onClick={() => setShowMap(prev => !prev)}
+                    onClick={() => setShowFullScreenMap(true)}
                     className="flex items-center text-[#57068B] hover:text-[#6A0BA7] transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#57068B] focus:ring-opacity-50 rounded-md px-3 py-1.5"
                   >
-                    <span className="mr-1">{showMap ? 'Hide Map' : 'Show Map'}</span>
+                    <span className="mr-1">Show Map</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      className={`h-4 w-4 transform transition-transform ${showMap ? 'rotate-180' : ''}`}
+                      className="h-4 w-4"
                       viewBox="0 0 20 20"
                       fill="currentColor"
                     >
@@ -108,17 +110,6 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
                     </svg>
                   </button>
                 </div>
-                {showMap && (
-                  <div className="h-64 w-full rounded-lg overflow-hidden border border-gray-200 mb-4">
-                    <MapComponent
-                      coordinates={coordinates}
-                      setCoordinates={setCoordinates}
-                      address={post.location}
-                      setAddress={() => {}}
-                      interactive={false}
-                    />
-                  </div>
-                )}
               </div>
             </div>
             
@@ -147,6 +138,31 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Map Modal */}
+      {showFullScreenMap && (
+        <div className="fixed inset-0 z-[60] bg-black bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg w-[90%] h-[90%] max-w-4xl max-h-[90vh] overflow-hidden relative">
+            <div className="absolute top-4 right-4 z-10">
+              <button
+                onClick={() => setShowFullScreenMap(false)}
+                className="bg-white rounded-full p-2 shadow-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#57068B] focus:ring-opacity-50"
+              >
+                <X className="h-6 w-6 text-gray-600" />
+              </button>
+            </div>
+            <div className="h-full w-full">
+              <MapComponent
+                coordinates={coordinates}
+                setCoordinates={setCoordinates}
+                address={post.location}
+                setAddress={() => {}}
+                interactive={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
