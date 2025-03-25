@@ -16,6 +16,11 @@ export default function Navbar() {
     if (showProfileMenu && target && !target.closest('.profile-menu')) {
       setShowProfileMenu(false)
     }
+    
+    // Close chat menu when clicking outside
+    if (showChatMenu && target && !target.closest('.chat-sidebar') && !target.closest('.chat-menu-button')) {
+      setShowChatMenu(false)
+    }
   }
 
   useEffect(() => {
@@ -23,10 +28,10 @@ export default function Navbar() {
     return () => {
       document.removeEventListener('click', handleClickOutside)
     }
-  }, [showProfileMenu])
+  }, [showProfileMenu, showChatMenu])
 
   return (
-    <nav className="border-b bg-white">
+    <nav className="border-b bg-white shadow">
       <style jsx>{`
         @keyframes gradient {
           0% {
@@ -43,8 +48,11 @@ export default function Navbar() {
 
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
         <button
-          onClick={() => setShowChatMenu(!showChatMenu)}
-          className="text-gray-500 hover:text-gray-700"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowChatMenu(!showChatMenu);
+          }}
+          className="text-gray-500 hover:text-gray-700 chat-menu-button"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -123,7 +131,7 @@ export default function Navbar() {
 
       {showChatMenu && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex">
-          <div className="bg-white dark:bg-gray-800 w-80 h-full overflow-y-auto shadow-lg">
+          <div className="bg-white dark:bg-gray-800 w-80 h-full overflow-y-auto shadow-lg chat-sidebar">
             <div className="p-4 border-b flex justify-between items-center">
               <h2 className="text-xl font-bold">Messages</h2>
               <button

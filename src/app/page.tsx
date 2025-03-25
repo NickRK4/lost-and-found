@@ -32,7 +32,12 @@ export default function MainPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Logo Only Header */}
-      <header className="bg-white shadow">
+      <header 
+        className="bg-white z-10" 
+        style={{ 
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.05)' 
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -70,7 +75,7 @@ export default function MainPage() {
       </header>
 
       {/* Hero Section */}
-      <div className="relative bg-white overflow-hidden">
+      <div className="relative bg-white overflow-hidden mt-1">
         <div className="max-w-7xl mx-auto">
           <div className="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
             <svg

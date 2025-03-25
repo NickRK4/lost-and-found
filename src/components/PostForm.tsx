@@ -45,8 +45,11 @@ export default function PostForm() {
 
       toast.success('Post created successfully!')
       
-      // Use direct window location change instead of router
-      window.location.href = '/dashboard'
+      // Ensure redirection to dashboard
+      setTimeout(() => {
+        router.push('/dashboard')
+        router.refresh()
+      }, 100)
     } catch (error) {
       console.error('Error creating post:', error)
       toast.error('Failed to create post')

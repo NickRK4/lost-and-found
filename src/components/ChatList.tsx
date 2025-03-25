@@ -73,6 +73,7 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
           .select('id, post_id, creator_id, claimer_id, created_at, updated_at')
           .or(`creator_id.eq.${currentUserId},claimer_id.eq.${currentUserId}`)
           .order('updated_at', { ascending: false })
+          .limit(10) // Limit to 10 most recent chats for better performance
 
         if (chatsError) {
           console.error('Error fetching chats:', chatsError)
@@ -85,74 +86,76 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
           return
         }
 
-        // Create an array to hold the formatted chats
-        const formattedChats: Chat[] = []
+        // Get all unique post IDs, creator IDs, and claimer IDs
+        const postIds = [...new Set(chatsData.map(chat => chat.post_id))]
+        const userIds = [...new Set([
+          ...chatsData.map(chat => chat.creator_id),
+          ...chatsData.map(chat => chat.claimer_id)
+        ])]
+
+        // Batch fetch posts
+        const { data: postsData, error: postsError } = await supabase
+          .from('posts')
+          .select('id, title')
+          .in('id', postIds)
+
+        if (postsError) {
+          console.error('Error fetching posts:', postsError)
+        }
+
+        // Batch fetch users
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds)
+
+        if (usersError) {
+          console.error('Error fetching users:', usersError)
+        }
+
+        // Create lookup maps for faster access
+        const postsMap = (postsData || []).reduce((map, post) => {
+          map[post.id] = post
+          return map
+        }, {} as Record<string, any>)
+
+        const usersMap = (usersData || []).reduce((map, user) => {
+          map[user.id] = user
+          return map
+        }, {} as Record<string, any>)
 
         // Process each chat
-        for (const chat of chatsData) {
-          // Fetch post data
-          const { data: postData, error: postError } = await supabase
-            .from('posts')
-            .select('title')
-            .eq('id', chat.post_id)
-            .single()
-
-          if (postError && postError.code !== 'PGRST116') {
-            console.error('Error fetching post:', postError)
-          }
-
-          // Fetch creator data
-          const { data: creatorData, error: creatorError } = await supabase
-            .from('users')
-            .select('id, first_name, last_name')
-            .eq('id', chat.creator_id)
-            .single()
-
-          if (creatorError && creatorError.code !== 'PGRST116') {
-            console.error('Error fetching creator:', creatorError)
-          }
-
-          // Fetch user data (claimer)
-          const { data: claimerData, error: claimerError } = await supabase
-            .from('users')
-            .select('id, first_name, last_name')
-            .eq('id', chat.claimer_id)
-            .single()
-
-          if (claimerError && claimerError.code !== 'PGRST116') {
-            console.error('Error fetching claimer:', claimerError)
-          }
-
-          // Fetch the latest messages
+        const formattedChats: Chat[] = await Promise.all(chatsData.map(async (chat) => {
+          // Fetch the latest message for this chat
           const { data: messagesData, error: messagesError } = await supabase
             .from('messages')
             .select('content, created_at')
             .eq('chat_id', chat.id)
             .order('created_at', { ascending: false })
-            .limit(5)
+            .limit(1)
 
           if (messagesError) {
-            console.error('Error fetching messages:', messagesError)
+            console.error('Error fetching messages for chat', chat.id, messagesError)
           }
 
-          formattedChats.push({
+          return {
             id: chat.id,
             post: {
-              title: postData?.title || 'Unknown Post'
+              title: (postsMap[chat.post_id]?.title) || 'Unknown Post'
             },
             creator: {
-              id: creatorData?.id || '',
-              first_name: creatorData?.first_name || 'Unknown',
-              last_name: creatorData?.last_name || 'User'
+              id: chat.creator_id,
+              first_name: usersMap[chat.creator_id]?.first_name || 'Unknown',
+              last_name: usersMap[chat.creator_id]?.last_name || 'User'
             },
             user: {
-              id: claimerData?.id || '',
-              first_name: claimerData?.first_name || 'Unknown',
-              last_name: claimerData?.last_name || 'User'
+              id: chat.claimer_id,
+              first_name: usersMap[chat.claimer_id]?.first_name || 'Unknown',
+              last_name: usersMap[chat.claimer_id]?.last_name || 'User'
             },
             messages: messagesData || []
-          })
-        }
+          }
+        }))
 
         setChats(formattedChats)
       } catch (error) {
