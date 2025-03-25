@@ -126,8 +126,8 @@ export default function NewPost() {
         throw new Error('Failed to create post')
       }
 
-      // Redirect to home page
-      router.push('/')
+      // Redirect to dashboard page instead of home page
+      router.push('/dashboard')
     } catch (error: any) {
       console.error('Full error:', error)
       setError(error.message)

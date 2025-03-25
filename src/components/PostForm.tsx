@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,13 @@ export default function PostForm() {
   const router = useRouter()
   const [uploading, setUploading] = useState(false)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  // Get the current user ID on component mount
+  useEffect(() => {
+    const currentUserId = localStorage.getItem('user_id')
+    setUserId(currentUserId)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -21,19 +28,25 @@ export default function PostForm() {
       return
     }
 
+    if (!userId) {
+      toast.error('You must be logged in to create a post')
+      return
+    }
+
     try {
       const { error } = await supabase.from('posts').insert({
         description: formData.get('description'),
         location: formData.get('location'),
         image_url: imageUrl,
-        user_id: 'anonymous', // We'll update this when we add authentication
+        user_id: userId,
       })
 
       if (error) throw error
 
       toast.success('Post created successfully!')
-      router.push('/dashboard')
-      router.refresh()
+      
+      // Use direct window location change instead of router
+      window.location.href = '/dashboard'
     } catch (error) {
       console.error('Error creating post:', error)
       toast.error('Failed to create post')

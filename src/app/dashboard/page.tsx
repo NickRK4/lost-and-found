@@ -7,6 +7,7 @@ import Image from 'next/image'
 import ClaimModal from '@/components/ClaimModal'
 import debounce from 'lodash.debounce'
 import dynamic from 'next/dynamic'
+import toast from 'react-hot-toast'
 
 const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false })
 
@@ -180,13 +181,13 @@ export default function Dashboard() {
 
   const handleStartChat = async (postId: string, creatorId: string) => {
     try {
+      const currentUserId = localStorage.getItem('user_id')
+      
       if (!currentUserId) {
-        console.error('No current user ID found')
+        toast.error('You must be logged in to start a chat')
         return
       }
 
-      console.log('Starting chat with:', { postId, creatorId, currentUserId })
-      
       // Check if chat already exists
       const { data: existingChat, error: findError } = await supabase
         .from('chats')
@@ -199,7 +200,8 @@ export default function Dashboard() {
       if (findError) {
         if (findError.code !== 'PGRST116') { // Not found error is expected
           console.error('Error checking for existing chat:', findError)
-          throw findError
+          toast.error('Error checking for existing chat: ' + findError.message)
+          return
         }
       } else if (existingChat) {
         // Navigate directly to existing chat
@@ -212,17 +214,20 @@ export default function Dashboard() {
       console.log('Creating new chat...')
       const { data: newChat, error: createError } = await supabase
         .from('chats')
-        .insert([{
+        .insert({
           post_id: postId,
           creator_id: creatorId,
-          claimer_id: currentUserId
-        }])
+          claimer_id: currentUserId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .select('id')
         .single()
 
       if (createError) {
         console.error('Error creating chat:', createError)
-        throw createError
+        toast.error('Failed to create chat: ' + createError.message)
+        return
       }
 
       // Navigate to new chat
@@ -231,10 +236,11 @@ export default function Dashboard() {
         router.push(`/chat/${newChat.id}`)
       } else {
         console.error('No chat data returned after creation')
+        toast.error('Failed to create chat. Please try again.')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting chat:', error)
-      alert('Failed to start chat. Please try again.')
+      toast.error('Failed to start chat: ' + (error.message || 'Unknown error'))
     }
   }
 
@@ -247,30 +253,32 @@ export default function Dashboard() {
     try {
       console.log('Claiming item:', selectedPost.id)
       
-      // Update post status and add claimer_id
-      const { error: postError } = await supabase
+      // Update only the post status
+      const { data, error: postError } = await supabase
         .from('posts')
         .update({ 
-          status: 'claimed',
-          claimer_id: currentUserId 
+          status: 'claimed'
         })
         .eq('id', selectedPost.id)
+        .select()
 
       if (postError) {
         console.error('Error updating post status:', postError)
-        throw postError
+        toast.error('Failed to claim item: ' + postError.message)
+        return
       }
 
-      console.log('Post claimed successfully')
+      console.log('Post claimed successfully', data)
+      toast.success('Item claimed successfully!')
       
       // Start chat
       await handleStartChat(selectedPost.id, selectedPost.user_id)
       
       // Refresh posts to show updated status
       fetchPosts()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error claiming item:', error)
-      alert('Failed to claim item. Please try again.')
+      toast.error('Failed to claim item: ' + (error.message || 'Unknown error'))
     }
   }
 

@@ -68,7 +68,6 @@ export default function Profile() {
             .from('users')
             .insert([{ 
               id: user.id,
-              user_id: user.id, 
               email: user.email,
               first_name: defaultFirstName,
               last_name: defaultLastName
@@ -76,10 +75,11 @@ export default function Profile() {
           
           if (createError) {
             console.error('Error creating profile:', createError)
-            setError('Failed to create profile')
+            setError('Failed to create profile: ' + createError.message)
           } else {
             setFirstName(defaultFirstName)
             setLastName(defaultLastName)
+            setSuccess('Profile created successfully!')
           }
         }
       } catch (error: any) {
