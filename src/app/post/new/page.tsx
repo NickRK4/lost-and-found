@@ -117,8 +117,8 @@ export default function NewPost() {
           location,
           image_url: publicUrl,
           status: 'active',
-          latitude: coordinates[0],
-          longitude: coordinates[1]
+          latitude: coordinates[0] || null,
+          longitude: coordinates[1] || null
         })
 
       if (postError) {

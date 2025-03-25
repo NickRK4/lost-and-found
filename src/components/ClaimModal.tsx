@@ -18,7 +18,8 @@ interface ClaimModalProps {
     image_url: string
     created_at: string
     user_id: string
-    username: string
+    first_name: string
+    last_name: string
     latitude?: number
     longitude?: number
   }
@@ -69,7 +70,7 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
             <div className="space-y-4">
               <div>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">Posted by</p>
-                <p className="font-medium">{post.username}</p>
+                <p className="font-medium">{post.first_name + "" + post.last_name}</p>
               </div>
               
               <div>
@@ -114,7 +115,7 @@ export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children
             </div>
             
             {/* Actions */}
-            <div className="mt-6 space-x-3 flex justify-end">
+            <div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-200">
               <button
                 onClick={onClose}
                 className="px-4 py-2 rounded-md text-[#57068B] hover:text-[#6A0BA7] border border-[#57068B] hover:bg-[#57068B]/5 transition-colors"

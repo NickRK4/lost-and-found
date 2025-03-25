@@ -8,161 +8,159 @@ export default function Profile() {
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [newUsername, setNewUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-
-
-    const fetchProfile = async () => {
+    const fetchUserProfile = async () => {
       setIsLoading(true)
-      const userId = localStorage.getItem('user_id')
-      if (!userId) {
-        setIsLoading(false)
-        return
-      }
-
       try {
-        const { data: profile } = await supabase
+        // Get the current user from Supabase Auth
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+          // If no user is found, redirect to auth page
+          router.push('/auth')
+          return
+        }
+        
+        setUserId(user.id)
+        setEmail(user.email || '')
+        
+        // Check if user has a profile in the users table
+        const { data: profile, error: profileError } = await supabase
           .from('users')
           .select('username')
-          .eq('id', userId)
+          .eq('id', user.id)
           .single()
-
+        
+        if (profileError && profileError.code !== 'PGRST116') {
+          // PGRST116 is the error code for "no rows found"
+          console.error('Error fetching profile:', profileError)
+          setError('Failed to load profile')
+        }
+        
         if (profile) {
-          setUsername(profile.username)
-          setNewUsername(profile.username)
-        }
-      } catch (error: unknown) {
-        if (error instanceof Error) {
-          console.error('Error fetching profile:', error.message)
+          // If profile exists, set the username
+          setUsername(profile.username || '')
+          setNewUsername(profile.username || '')
         } else {
-          console.error('Unknown error fetching profile')
+          // If no profile exists, create one with default username from email
+          const defaultUsername = user.email ? user.email.split('@')[0] : `user_${Date.now()}`
+          
+          const { error: createError } = await supabase
+            .from('users')
+            .insert([{ 
+              id: user.id,
+              username: defaultUsername,
+              email: user.email
+            }])
+          
+          if (createError) {
+            console.error('Error creating profile:', createError)
+            setError('Failed to create profile')
+          } else {
+            setUsername(defaultUsername)
+            setNewUsername(defaultUsername)
+          }
         }
+      } catch (error: any) {
+        console.error('Error in profile setup:', error.message)
+        setError('Failed to load profile')
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchProfile()
-  }, [])
-
+    fetchUserProfile()
+  }, [router])
 
   const updateUsername = async () => {
     if (newUsername === username) return
-  
+    
     setIsLoading(true)
     setError('')
+    setSuccess('')
   
     try {
-      const userId = localStorage.getItem('user_id')
       if (!userId) {
         throw new Error('User not authenticated')
       }
   
-      // First check if user exists
-      const { data: existingUser, error: fetchError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', userId)
-        .single()
-  
-      if (fetchError) throw fetchError
-      if (!existingUser) throw new Error('User not found')
-  
       // Update username
-      const { data, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update({ username: newUsername })
         .eq('id', userId)
-        .select()
   
       if (updateError) throw updateError
   
-      if (!data || data.length === 0) {
-        return;
-      }
-  
       setUsername(newUsername)
-      setNewUsername(newUsername)
-      setError('')
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error('Error updating username:', error.message)
-        setError(error.message || 'Failed to update username')
-      } else {
-        console.error('Unknown error updating username')
-        setError('Failed to update username')
-      }
+      setSuccess('Username updated successfully')
+    } catch (error: any) {
+      console.error('Error updating username:', error.message)
+      setError(error.message || 'Failed to update username')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const updatePassword = async () => {
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
+  const signOut = async () => {
     setIsLoading(true)
-    setError('')
-
-    const { error } = await supabase.auth.updateUser({
-      password: password
-    })
-
-    if (error) {
-      setError('Failed to update password')
-    } else {
-      setPassword('')
-      setConfirmPassword('')
+    try {
+      await supabase.auth.signOut()
+      router.push('/auth')
+    } catch (error: any) {
+      console.error('Error signing out:', error.message)
+      setError('Failed to sign out')
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   const deleteAccount = async () => {
     setIsLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    try {
+      if (!userId) {
+        throw new Error('User not authenticated')
+      }
+
+      // Delete user's posts
+      await supabase
+        .from('posts')
+        .delete()
+        .eq('user_id', userId)
+
+      // Delete user's messages
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('user_id', userId)
+
+      // Delete user's chats
+      await supabase
+        .from('chats')
+        .delete()
+        .or(`creator_id.eq.${userId},claimer_id.eq.${userId}`)
+
+      // Delete user's profile
+      await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+
+      // Sign out
+      await supabase.auth.signOut()
       router.push('/auth')
-      return
+    } catch (error: any) {
+      console.error('Error deleting account:', error.message)
+      setError('Failed to delete account')
+      setIsLoading(false)
+      setShowDeleteConfirm(false)
     }
-
-    // Delete user's posts
-    await supabase
-      .from('posts')
-      .delete()
-      .eq('user_id', user.id)
-
-    // Delete user's messages
-    await supabase
-      .from('messages')
-      .delete()
-      .eq('user_id', user.id)
-
-    // Delete user's chats
-    await supabase
-      .from('chats')
-      .delete()
-      .or(`creator_id.eq.${user.id},claimer_id.eq.${user.id}`)
-
-    // Delete user's profile
-    await supabase
-      .from('users')
-      .delete()
-      .eq('id', user.id)
-
-    // Delete auth user
-    await supabase.auth.admin.deleteUser(user.id)
-
-    // Sign out
-    await supabase.auth.signOut()
-    router.push('/auth')
   }
 
   return (
@@ -185,8 +183,28 @@ export default function Profile() {
             {error}
           </div>
         )}
+        
+        {success && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            {success}
+          </div>
+        )}
 
         <div className="space-y-6">
+          {/* Email Section (Read-only) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Email (Google Account)</label>
+            <input
+              type="text"
+              value={email}
+              disabled
+              className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-[#861397] focus:ring-[#861397] cursor-not-allowed"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Your email is managed by Google and cannot be changed here
+            </p>
+          </div>
+
           {/* Username Section */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Username</label>
@@ -198,35 +216,21 @@ export default function Profile() {
             />
             <button
               onClick={updateUsername}
-              disabled={isLoading || newUsername === username}
+              disabled={isLoading || newUsername === username || !newUsername.trim()}
               className="mt-2 w-full bg-[#861397] text-white py-2 px-4 rounded-md hover:bg-opacity-90 disabled:opacity-50"
             >
               Update Username
             </button>
           </div>
 
-          {/* Password Section */}
+          {/* Sign Out Button */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">New Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
-            />
-            <label className="block text-sm font-medium text-gray-700 mt-4">Confirm Password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#861397] focus:ring-[#861397]"
-            />
             <button
-              onClick={updatePassword}
-              disabled={isLoading || !password || !confirmPassword}
-              className="mt-2 w-full bg-[#861397] text-white py-2 px-4 rounded-md hover:bg-opacity-90 disabled:opacity-50"
+              onClick={signOut}
+              disabled={isLoading}
+              className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-300 disabled:opacity-50"
             >
-              Update Password
+              Sign Out
             </button>
           </div>
 
@@ -234,7 +238,8 @@ export default function Profile() {
           <div>
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600"
+              disabled={isLoading}
+              className="w-full bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 disabled:opacity-50"
             >
               Delete Account
             </button>

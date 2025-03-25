@@ -68,9 +68,36 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    // Get user ID from localStorage safely (only on client side)
-    setCurrentUserId(localStorage.getItem('user_id') || '')
-  }, [])
+    // Check if user is logged in using Supabase session
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error checking authentication:', error)
+          router.push('/auth')
+          return
+        }
+        
+        if (session && session.user) {
+          // Save user ID to localStorage for other components that might need it
+          localStorage.setItem('user_id', session.user.id)
+          setCurrentUserId(session.user.id)
+          
+          // Fetch posts now that we know the user is authenticated
+          fetchPosts()
+        } else {
+          console.log('No active session found')
+          router.push('/auth')
+        }
+      } catch (error) {
+        console.error('Unexpected error during auth check:', error)
+        router.push('/auth')
+      }
+    }
+    
+    checkAuth()
+  }, [timeRange, router])
 
   useEffect(() => {
     if (postCardRef.current) {
@@ -98,11 +125,14 @@ export default function Dashboard() {
         throw error
       }
 
+      // Filter out posts where the user no longer exists (username will be null)
+      const validPosts = (data || []).filter(post => post.username !== null)
+      
       // Filter posts based on time range
       const now = new Date()
-      const filteredPosts = (data || []).map(post => ({
+      const filteredPosts = validPosts.map(post => ({
         ...post,
-        username: post.username.username
+        username: post.username?.username || 'Unknown User'
       })).filter(post => {
         const postDate = new Date(post.created_at)
         const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -146,19 +176,15 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    // Check if user is logged in
-    const userId = localStorage.getItem('user_id')
-    if (!userId) {
-      router.push('/auth')
-      return
-    }
-
-    fetchPosts()
-  }, [timeRange, router])
-
   const handleStartChat = async (postId: string, creatorId: string) => {
     try {
+      if (!currentUserId) {
+        console.error('No current user ID found')
+        return
+      }
+
+      console.log('Starting chat with:', { postId, creatorId, currentUserId })
+      
       // Check if chat already exists
       const { data: existingChat, error: findError } = await supabase
         .from('chats')
@@ -168,53 +194,81 @@ export default function Dashboard() {
         .eq('claimer_id', currentUserId)
         .single()
 
-      if (!findError && existingChat) {
+      if (findError) {
+        if (findError.code !== 'PGRST116') { // Not found error is expected
+          console.error('Error checking for existing chat:', findError)
+          throw findError
+        }
+      } else if (existingChat) {
         // Navigate directly to existing chat
+        console.log('Found existing chat:', existingChat)
         router.push(`/chat/${existingChat.id}`)
         return
       }
 
       // Create new chat
+      console.log('Creating new chat...')
       const { data: newChat, error: createError } = await supabase
         .from('chats')
-        .insert({
+        .insert([{
           post_id: postId,
           creator_id: creatorId,
           claimer_id: currentUserId
-        })
+        }])
         .select('id')
         .single()
 
-      if (createError) throw createError
+      if (createError) {
+        console.error('Error creating chat:', createError)
+        throw createError
+      }
 
       // Navigate to new chat
       if (newChat) {
+        console.log('Created new chat:', newChat)
         router.push(`/chat/${newChat.id}`)
+      } else {
+        console.error('No chat data returned after creation')
       }
     } catch (error) {
       console.error('Error starting chat:', error)
+      alert('Failed to start chat. Please try again.')
     }
   }
 
   const handleClaimItem = async () => {
-    if (!selectedPost || !currentUserId) return
+    if (!selectedPost || !currentUserId) {
+      console.error('No selected post or current user ID')
+      return
+    }
 
     try {
-      // Update post status
+      console.log('Claiming item:', selectedPost.id)
+      
+      // Update post status and add claimer_id
       const { error: postError } = await supabase
         .from('posts')
-        .update({ status: 'claimed' })
+        .update({ 
+          status: 'claimed',
+          claimer_id: currentUserId 
+        })
         .eq('id', selectedPost.id)
 
-      if (postError) throw postError
+      if (postError) {
+        console.error('Error updating post status:', postError)
+        throw postError
+      }
 
+      console.log('Post claimed successfully')
+      
       // Start chat
       await handleStartChat(selectedPost.id, selectedPost.user_id)
-
-      // Refresh posts
+      
+      // Refresh posts to show updated status
       fetchPosts()
     } catch (error) {
       console.error('Error claiming item:', error)
+      alert('Failed to claim item. Please try again.')
     }
   }
 
