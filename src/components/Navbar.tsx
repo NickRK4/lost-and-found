@@ -5,11 +5,100 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import ChatList from './ChatList'
+import { supabase } from '@/lib/supabase'
 
 export default function Navbar() {
   const router = useRouter()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showChatMenu, setShowChatMenu] = useState(false)
+  const [notifications, setNotifications] = useState<number>(0)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Get current user ID from localStorage
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null
+    setCurrentUserId(userId)
+    
+    if (userId) {
+      fetchNotifications(userId)
+      
+      // Set up subscription for real-time updates
+      const subscription = supabase
+        .channel('claim_notifications')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'claim_questionnaire'
+        }, () => {
+          fetchNotifications(userId)
+        })
+        .subscribe()
+      
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+  }, [])
+
+  const fetchNotifications = async (userId: string) => {
+    if (!userId) return
+    
+    try {
+      // First get all posts by the current user
+      const { data: userPosts, error: postsError } = await supabase
+        .from('posts')
+        .select('id')
+        .eq('user_id', userId)
+      
+      if (postsError) {
+        console.error('Error fetching user posts:', postsError)
+        return
+      }
+      
+      if (!userPosts || userPosts.length === 0) {
+        setNotifications(0)
+        return
+      }
+      
+      const postIds = userPosts.map(post => post.id)
+      
+      // Try to get count of pending claims from claim_questionnaire table
+      let count = 0
+      
+      try {
+        // First try the claim_questionnaire table
+        const { data, error, count: questionnaireCount } = await supabase
+          .from('claim_questionnaire')
+          .select('id', { count: 'exact' })
+          .in('post_id', postIds)
+          .eq('status', 'pending')
+        
+        if (error) {
+          console.log('Trying claims table instead:', error.message)
+          
+          // If there's an error, try the claims table
+          const { data: claimsData, error: claimsError, count: claimsCount } = await supabase
+            .from('claims')
+            .select('id', { count: 'exact' })
+            .in('post_id', postIds)
+            .eq('status', 'pending')
+          
+          if (!claimsError) {
+            count = claimsCount || 0
+          }
+        } else {
+          count = questionnaireCount || 0
+        }
+      } catch (countError) {
+        console.error('Error counting notifications:', countError)
+      }
+      
+      setNotifications(count)
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+      setNotifications(0)
+    }
+  }
 
   const handleClickOutside = (e: MouseEvent) => {
     const target = e.target as HTMLElement
@@ -78,21 +167,53 @@ export default function Navbar() {
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center">
           <button
             onClick={() => router.push('/post/new')}
-            className="px-4 py-2 rounded-md hover:bg-opacity-80"
+            className="px-4 py-2 rounded-md hover:bg-opacity-80 h-10 flex items-center"
             style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
           >
             Post Item
           </button>
-          <div className="relative ml-4 flex items-center">
+          
+          {/* Notification Bell */}
+          <div className="relative mx-4 flex items-center h-10">
+            <button
+              onClick={() => router.push('/claims')}
+              className="text-gray-500 hover:text-gray-700 relative flex items-center justify-center h-full"
+              aria-label="View claim requests"
+            >
+              <svg 
+                className={`h-6 w-6 ${notifications > 0 ? 'text-[#57068B]' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" 
+                />
+              </svg>
+              {notifications > 0 && (
+                <>
+                  <span className="absolute -top-1 -right-1 bg-[#57068B] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {notifications}
+                  </span>
+                  <span className="absolute inset-0 animate-ping rounded-full bg-[#57068B] opacity-75"></span>
+                </>
+              )}
+            </button>
+          </div>
+          
+          <div className="relative flex items-center h-10">
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 setShowProfileMenu(!showProfileMenu)
               }}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 flex items-center justify-center h-full"
             >
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />

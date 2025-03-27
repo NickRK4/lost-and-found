@@ -8,6 +8,7 @@ import ClaimModal from '@/components/ClaimModal'
 import debounce from 'lodash.debounce'
 import dynamic from 'next/dynamic'
 import toast from 'react-hot-toast'
+import ClaimQuestionnaire from '@/components/ClaimQuestionnaire'
 
 const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false })
 
@@ -39,35 +40,11 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
   const [currentUserId, setCurrentUserId] = useState<string>('')
+  const [userPendingClaims, setUserPendingClaims] = useState<string[]>([])
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false)
   const postCardRef = useRef<HTMLDivElement>(null)
   const [postCardWidth, setPostCardWidth] = useState<number>(300)
   const [expandedImage, setExpandedImage] = useState<string | null>(null)
-  const [darkMode, setDarkMode] = useState(false)
-
-  useEffect(() => {
-    // Check for saved theme preference in localStorage
-    const savedTheme = localStorage.getItem('theme')
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-      setDarkMode(true)
-      document.documentElement.classList.add('dark')
-    } else {
-      setDarkMode(false)
-      document.documentElement.classList.remove('dark')
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode)
-    if (darkMode) {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    } else {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
-    }
-  }
 
   useEffect(() => {
     // Check if user is logged in using Supabase session
@@ -88,6 +65,7 @@ export default function Dashboard() {
           
           // Fetch posts now that we know the user is authenticated
           fetchPosts()
+          fetchUserPendingClaims()
         } else {
           console.log('No active session found')
           router.push('/auth')
@@ -176,6 +154,45 @@ export default function Dashboard() {
       console.error('Error fetching posts:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchUserPendingClaims = async () => {
+    if (!currentUserId) return
+    
+    try {
+      // First try to fetch from claim_questionnaire table
+      let { data, error } = await supabase
+        .from('claim_questionnaire')
+        .select('post_id')
+        .eq('claimer_id', currentUserId)
+        .eq('status', 'pending')
+      
+      // If there's an error (likely table doesn't exist), try the claims table instead
+      if (error) {
+        console.log('Trying claims table instead:', error.message)
+        
+        const { data: claimsData, error: claimsError } = await supabase
+          .from('claims')
+          .select('post_id')
+          .eq('user_id', currentUserId)
+          .eq('status', 'pending')
+        
+        if (claimsError) {
+          console.log('Error fetching from claims table:', claimsError)
+          // If both tables fail, just set an empty array
+          setUserPendingClaims([])
+          return
+        }
+        
+        data = claimsData
+      }
+      
+      setUserPendingClaims(data?.map(claim => claim.post_id) || [])
+    } catch (error) {
+      console.error('Error fetching pending claims:', error)
+      // In case of any other error, set an empty array
+      setUserPendingClaims([])
     }
   }
 
@@ -282,6 +299,18 @@ export default function Dashboard() {
     }
   }
 
+  const handleOpenQuestionnaire = (post: Post) => {
+    setSelectedPost(post)
+    setShowQuestionnaire(true)
+  }
+
+  const handleQuestionnaireSubmitSuccess = () => {
+    setShowQuestionnaire(false)
+    setSelectedPost(null)
+    fetchUserPendingClaims()
+    toast.success('Claim request submitted, waiting for the owner to verify')
+  }
+
   const debouncedSearch = useCallback(
     debounce((query: string) => {
       if (!posts.length) return; // Don't run if posts haven't loaded yet
@@ -314,14 +343,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen transition-colors bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen transition-colors bg-gray-50">
       {/* Time Range Filter */}
       <div className="max-w-7xl mx-auto px-4 py-6 mb-5">
         <div className="flex items-center gap-4">
           <div className="flex gap-2">
             <button
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                timeRange === '1day' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200 hover:bg-[#861397]/10'
+                timeRange === '1day' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('1day')}
             >
@@ -329,7 +358,7 @@ export default function Dashboard() {
             </button>
             <button
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                timeRange === '7days' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200 hover:bg-[#861397]/10'
+                timeRange === '7days' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('7days')}
             >
@@ -337,7 +366,7 @@ export default function Dashboard() {
             </button>
             <button
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                timeRange === 'older' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200 hover:bg-[#861397]/10'
+                timeRange === 'older' ? 'bg-[#861397] text-white' : 'bg-white text-gray-700 hover:bg-[#861397]/10'
               }`}
               onClick={() => setTimeRange('older')}
             >
@@ -348,46 +377,32 @@ export default function Dashboard() {
           <div className="w-64">
             <input
               type="text"
-              className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#861397] focus:border-[#861397]"
+              className="w-full px-4 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#861397] focus:border-[#861397]"
               placeholder="Search for items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#57068B]"
-          >
-            {darkMode ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-            )}
-          </button>
         </div>
         <div className="flex space-x-4">
           {/* Posts Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-4 w-full justify-items-center">
             {loading ? (
               <div className="col-span-full flex justify-center items-center">
-                <div className="text-gray-800 dark:text-white text-center">
+                <div className="text-gray-800 text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#57068B] mx-auto mb-2"></div>
                   <p>Loading posts...</p>
                 </div>
               </div>
             ) : filteredPosts.length === 0 ? (
-              <div className="col-span-full text-center text-gray-800 dark:text-white">
+              <div className="col-span-full text-center text-gray-800">
                 <p>No posts found</p>
               </div>
             ) : (
               filteredPosts.map((post) => (
                 <div
                   key={post.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden w-full"
+                  className="bg-white rounded-lg shadow-md overflow-hidden w-full"
                   style={{ maxWidth: "300px" }}
                 >
                   <div className="relative h-48 w-full">
@@ -400,10 +415,10 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="p-4">
-                    <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">{post.title}</h3>
+                    <h3 className="text-lg font-semibold mb-2 text-gray-900">{post.title}</h3>
                     <div className="flex flex-col">
                       <div className="flex items-center mb-1">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        <span className="text-sm font-medium text-gray-900">
                           {post.first_name} {post.last_name}
                         </span>
                         {post.claimer && (
@@ -412,17 +427,17 @@ export default function Dashboard() {
                           </span>
                         )}
                       </div>
-                      <p className="text-gray-600 dark:text-gray-300 flex-grow truncate">{post.location}</p>
+                      <p className="text-gray-600 flex-grow truncate">{post.location}</p>
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 line-clamp-2">{post.description}</p>
+                    <p className="text-gray-500 text-sm mb-4 line-clamp-2">{post.description}</p>
                     <div className="flex justify-between items-center mb-4">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{post.first_name} {post.last_name}</span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(post.created_at).toLocaleDateString()}</span>
+                      <span className="text-sm text-gray-500">{post.first_name} {post.last_name}</span>
+                      <span className="text-sm text-gray-500">{new Date(post.created_at).toLocaleDateString()}</span>
                     </div>
                     {post.user_id === currentUserId ? (
                       <button
                         disabled
-                        className="w-full px-4 py-2 rounded-md bg-gray-300 dark:bg-gray-700 dark:text-gray-300 cursor-not-allowed"
+                        className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
                       >
                         Your Post
                       </button>
@@ -436,13 +451,20 @@ export default function Dashboard() {
                     ) : post.status === 'claimed' ? (
                       <button
                         disabled
-                        className="w-full px-4 py-2 rounded-md bg-gray-300 dark:bg-gray-700 dark:text-gray-300 cursor-not-allowed"
+                        className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
                       >
                         Cannot Claim
                       </button>
+                    ) : userPendingClaims.includes(post.id) ? (
+                      <button
+                        disabled
+                        className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
+                      >
+                        Claim Pending
+                      </button>
                     ) : (
                       <button
-                        onClick={() => setSelectedPost(post)}
+                        onClick={() => handleOpenQuestionnaire(post)}
                         className="w-full px-4 py-2 rounded-md bg-[#57068B] text-white hover:bg-[#6A0BA7]"
                       >
                         Claim Item
@@ -457,12 +479,25 @@ export default function Dashboard() {
       </div>
 
       {/* Claim Modal */}
-      {selectedPost && (
+      {selectedPost && !showQuestionnaire && (
         <ClaimModal
           post={selectedPost}
           onClose={() => setSelectedPost(null)}
           onClaim={handleClaimItem}
           isOwnPost={selectedPost.user_id === currentUserId}
+        />
+      )}
+
+      {/* Claim Questionnaire Modal */}
+      {showQuestionnaire && selectedPost && (
+        <ClaimQuestionnaire
+          post={selectedPost}
+          onClose={() => {
+            setShowQuestionnaire(false)
+            setSelectedPost(null)
+          }}
+          onSubmitSuccess={handleQuestionnaireSubmitSuccess}
+          currentUserId={currentUserId}
         />
       )}
 
