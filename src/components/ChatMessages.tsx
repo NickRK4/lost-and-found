@@ -9,6 +9,7 @@ interface Message {
   content: string
   created_at: string
   user_id: string
+  is_system_message?: boolean
   sender: {
     first_name?: string
     last_name?: string
@@ -20,6 +21,7 @@ interface RawMessage {
   content: string
   created_at: string
   user_id: string
+  is_system_message?: boolean
   sender: {
     first_name?: string
     last_name?: string
@@ -45,51 +47,104 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
     if (!chatId) return
 
     const fetchMessages = async () => {
+      setLoading(true)
       try {
+        // Simple query without relationships - just get the messages
         const { data: messagesData, error } = await supabase
           .from('messages')
-          .select(`
-            id,
-            content,
-            created_at,
-            user_id,
-            sender:users!user_id (
-              first_name,
-              last_name
-            )
-          `)
+          .select('id, content, created_at, user_id')
           .eq('chat_id', chatId)
           .order('created_at', { ascending: true })
 
         if (error) {
           console.error('Error fetching messages:', error)
+          setLoading(false)
           return
         }
 
-        if (messagesData) {
-          const formattedMessages: Message[] = (messagesData as RawMessage[]).map(msg => {
-            // Extract sender data (could be an array or a single object)
-            const senderData = Array.isArray(msg.sender) && msg.sender.length > 0
-              ? msg.sender[0]
-              : (msg.sender as any) || { first_name: 'Unknown', last_name: '' }
-            
+        // If no messages, just set empty array and return
+        if (!messagesData || messagesData.length === 0) {
+          setMessages([])
+          setLoading(false)
+          return
+        }
+
+        // Get all user IDs from messages
+        const userIds = [...new Set(messagesData.map(msg => msg.user_id))].filter(Boolean)
+        
+        // Create a map for user profiles
+        const userProfileMap: Record<string, any> = {}
+        
+        // Only try to fetch user data if we have user IDs
+        if (userIds.length > 0) {
+          try {
+            // Fetch each user individually to avoid relationship errors
+            for (const userId of userIds) {
+              if (!userId) continue
+              
+              const { data: userData } = await supabase
+                .from('users')
+                .select('first_name, last_name')
+                .eq('id', userId)
+                .single()
+                
+              if (userData) {
+                userProfileMap[userId] = userData
+              }
+            }
+          } catch (userError) {
+            console.error('Error fetching user data:', userError)
+            // Continue with what we have - don't let user data errors stop the chat
+          }
+        }
+        
+        // Format messages with user data
+        const formattedMessages: Message[] = messagesData.map(msg => {
+          // Check if this is a system message based on content patterns
+          const isSystemMessage = 
+            msg.content.includes('✅') || 
+            msg.content.includes('❌') || 
+            msg.content.includes('has accepted your claim') ||
+            msg.content.includes('has rejected your claim') ||
+            msg.content.includes('This claim has been');
+          
+          if (isSystemMessage) {
             return {
               id: msg.id,
               content: msg.content,
               created_at: msg.created_at,
               user_id: msg.user_id,
+              is_system_message: true,
               sender: {
-                first_name: senderData.first_name || '',
-                last_name: senderData.last_name || ''
+                first_name: 'System',
+                last_name: 'Notification'
               }
             }
-          })
-          setMessages(formattedMessages)
-        }
+          }
+          
+          // For regular messages
+          const isCurrentUser = msg.user_id === currentUserId;
+          const userProfile = userProfileMap[msg.user_id] || {};
+          
+          return {
+            id: msg.id,
+            content: msg.content,
+            created_at: msg.created_at,
+            user_id: msg.user_id,
+            is_system_message: false,
+            sender: {
+              first_name: isCurrentUser ? 'You' : (userProfile.first_name || 'User'),
+              last_name: userProfile.last_name || ''
+            }
+          }
+        })
+        
+        setMessages(formattedMessages)
+      } catch (error) {
+        console.error('Error in fetchMessages:', error)
+      } finally {
         setLoading(false)
         scrollToBottom()
-      } catch (error) {
-        console.error('Unexpected error:', error)
       }
     }
 
@@ -108,45 +163,79 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
           filter: `chat_id=eq.${chatId}`
         },
         async (payload) => {
-          // Fetch the complete message data including the sender
-          const { data: newMessageData, error } = await supabase
-            .from('messages')
-            .select(`
-              id,
-              content,
-              created_at,
-              user_id,
-              sender:users!user_id (
-                first_name,
-                last_name
-              )
-            `)
-            .eq('id', payload.new.id)
-            .single()
+          try {
+            // Fetch the new message directly - simple query
+            const { data: newMessage, error } = await supabase
+              .from('messages')
+              .select('id, content, created_at, user_id')
+              .eq('id', payload.new.id)
+              .single()
 
-          if (error) {
-            console.error('Error fetching new message:', error)
-            return
-          }
+            if (error || !newMessage) {
+              console.error('Error fetching new message:', error)
+              return
+            }
 
-          if (newMessageData) {
-            // Extract sender data
-            const senderData = Array.isArray(newMessageData.sender) && newMessageData.sender.length > 0
-              ? newMessageData.sender[0]
-              : (newMessageData.sender as any) || { first_name: 'Unknown', last_name: '' }
+            // Check if this is a system message based on content patterns
+            const isSystemMessage = 
+              newMessage.content.includes('✅') || 
+              newMessage.content.includes('❌') || 
+              newMessage.content.includes('has accepted your claim') ||
+              newMessage.content.includes('has rejected your claim') ||
+              newMessage.content.includes('This claim has been');
+            
+            if (isSystemMessage) {
+              const systemMessage: Message = {
+                id: newMessage.id,
+                content: newMessage.content,
+                created_at: newMessage.created_at,
+                user_id: newMessage.user_id,
+                is_system_message: true,
+                sender: {
+                  first_name: 'System',
+                  last_name: 'Notification'
+                }
+              }
+              
+              setMessages(prev => [...prev, systemMessage])
+              scrollToBottom()
+              return
+            }
+            
+            // For regular messages, fetch the user profile if needed
+            let userProfile = null
+            try {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('first_name, last_name')
+                .eq('id', newMessage.user_id)
+                .single()
+                
+              userProfile = userData
+            } catch (userError) {
+              console.error('Error fetching user data for new message:', userError)
+              // Continue without user data
+            }
+            
+            // Check if this is the current user's message
+            const isCurrentUser = newMessage.user_id === currentUserId;
             
             const formattedMessage: Message = {
-              id: newMessageData.id,
-              content: newMessageData.content,
-              created_at: newMessageData.created_at,
-              user_id: newMessageData.user_id,
+              id: newMessage.id,
+              content: newMessage.content,
+              created_at: newMessage.created_at,
+              user_id: newMessage.user_id,
+              is_system_message: false,
               sender: {
-                first_name: senderData.first_name || '',
-                last_name: senderData.last_name || ''
+                first_name: isCurrentUser ? 'You' : (userProfile?.first_name || 'User'),
+                last_name: userProfile?.last_name || ''
               }
             }
+            
             setMessages(prev => [...prev, formattedMessage])
             scrollToBottom()
+          } catch (error) {
+            console.error('Error handling real-time message:', error)
           }
         }
       )
@@ -158,42 +247,57 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
   }, [chatId])
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return
-
-    // Create temporary message
-    const tempMessage = {
-      id: Date.now().toString(), // Temporary ID
-      content: newMessage.trim(),
+    if (!newMessage.trim() || !currentUserId) return
+    
+    const messageContent = newMessage.trim()
+    setNewMessage('') // Clear input immediately
+    
+    // Create temporary message with optimistic UI
+    const tempId = `temp-${Date.now()}`
+    const tempMessage: Message = {
+      id: tempId,
+      content: messageContent,
       created_at: new Date().toISOString(),
-      user_id: currentUserId || '',
-      sender: { first_name: 'You', last_name: '' }
+      user_id: currentUserId,
+      is_system_message: false, // Keep this for UI purposes only
+      sender: { 
+        first_name: 'You', 
+        last_name: '' 
+      }
     }
-
-    // Optimistically add to messages
+    
+    // Add to messages immediately for better UX
     setMessages(prev => [...prev, tempMessage])
-    setNewMessage('')
     scrollToBottom()
-
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          chat_id: chatId,
-          user_id: currentUserId,
-          content: newMessage.trim()
-        })
-
-      if (error) throw error
-    } catch (error) {
-      console.error('Error sending message:', error)
-      // Remove the temporary message if there was an error
-      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+    
+    // Send message to database without waiting for response
+    // This is a "fire and forget" approach
+    const sendMessageToDatabase = async () => {
+      try {
+        await supabase
+          .from('messages')
+          .insert({
+            chat_id: chatId,
+            user_id: currentUserId,
+            content: messageContent
+            // Removed is_system_message field as it doesn't exist in the database
+          })
+        // Message sent successfully, but we don't need to do anything
+        // The temporary message is already displayed and the real-time 
+        // subscription might add the actual message
+      } catch (error) {
+        // Log the error but keep the message visible
+        console.error('Error sending message:', error)
+      }
     }
+    
+    // Execute without awaiting the result
+    sendMessageToDatabase()
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {loading ? (
           <p className="text-center text-gray-500">Loading messages...</p>
         ) : messages.length === 0 ? (
@@ -203,23 +307,33 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             <div
               key={message.id}
               className={`flex ${
-                message.user_id === currentUserId ? 'justify-end' : 'justify-start'
+                message.is_system_message 
+                  ? 'justify-center' 
+                  : message.user_id === currentUserId 
+                    ? 'justify-end' 
+                    : 'justify-start'
               }`}
             >
               <div
-                className={`max-w-[70%] rounded-lg p-3 ${
-                  message.user_id === currentUserId
-                    ? 'bg-[#861397] text-white'
-                    : 'bg-gray-100'
-                }`}
+                className={`${
+                  message.is_system_message
+                    ? 'bg-gray-200 text-gray-800 max-w-[90%] text-center'
+                    : message.user_id === currentUserId
+                      ? 'bg-[#861397] text-white max-w-[70%]'
+                      : 'bg-gray-100 max-w-[70%]'
+                } rounded-lg p-2`}
               >
-                <p className="text-sm font-medium mb-1">
-                  {message.user_id === currentUserId 
-                    ? 'You' 
-                    : message.sender.first_name && message.sender.last_name 
-                      ? `${message.sender.first_name} ${message.sender.last_name}` 
-                      : `${message.sender.first_name || 'Unknown'}`}
-                </p>
+                {message.is_system_message ? (
+                  <p className="text-sm font-medium mb-1 text-blue-600">System Notification</p>
+                ) : (
+                  <p className="text-sm font-medium mb-1">
+                    {message.user_id === currentUserId 
+                      ? 'You' 
+                      : message.sender.first_name && message.sender.last_name 
+                        ? `${message.sender.first_name} ${message.sender.last_name}` 
+                        : `${message.sender.first_name || 'Unknown'}`}
+                  </p>
+                )}
                 <p>{message.content}</p>
                 <p className="text-xs mt-1 opacity-75">
                   {formatDistanceToNow(new Date(message.created_at))} ago
@@ -230,7 +344,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
-      <div className="border-t p-4">
+      <div className="border-t p-2">
         <div className="flex space-x-2">
           <input
             type="text"
@@ -240,7 +354,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               if (e.key === 'Enter') handleSendMessage()
             }}
             placeholder="Type your message..."
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:border-[#861397] focus:ring-1 focus:ring-[#861397]"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-1 focus:outline-none focus:border-[#861397] focus:ring-1 focus:ring-[#861397]"
           />
           <button
             onClick={handleSendMessage}

@@ -25,7 +25,7 @@ export default function EditProfile() {
 
       try {
         const { data, error } = await supabase
-          .from('profiles')
+          .from('users')
           .select('*')
           .eq('id', userId)
           .single()
@@ -37,7 +37,7 @@ export default function EditProfile() {
           setPreviewUrl(data.avatar_url)
         }
       } catch (error) {
-        console.error('Error fetching profile:', error)
+        console.error('Error fetching user data:', error)
       } finally {
         setLoading(false)
       }
@@ -88,15 +88,15 @@ export default function EditProfile() {
       }
 
       const { error } = await supabase
-        .from('profiles')
+        .from('users')
         .update(updates)
         .eq('id', userId)
 
       if (error) throw error
 
     } catch (error) {
-      console.error('Error updating profile:', error)
-      alert('Error updating profile. Please try again.')
+      console.error('Error updating user data:', error)
+      alert('Error updating user data. Please try again.')
     } finally {
       setLoading(false)
     }

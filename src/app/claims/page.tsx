@@ -40,12 +40,27 @@ interface ClaimRequest {
   }
 }
 
+interface Notification {
+  type: 'accepted' | 'rejected'
+  postTitle: string
+  ownerName: string
+  timestamp: string
+}
+
+interface Owner {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
 export default function ClaimsPage() {
   const [claimRequests, setClaimRequests] = useState<ClaimRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [selectedClaim, setSelectedClaim] = useState<ClaimRequest | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -60,12 +75,10 @@ export default function ClaimsPage() {
         if (session && session.user) {
           setCurrentUserId(session.user.id)
           fetchClaimRequests(session.user.id)
-        } else {
-          // Redirect to login if not authenticated
-          window.location.href = '/auth'
+          fetchNotifications(session.user.id)
         }
       } catch (error) {
-        console.error('Error checking authentication:', error)
+        console.error('Unexpected error during authentication check:', error)
       }
     }
     
@@ -138,6 +151,125 @@ export default function ClaimsPage() {
     }
   }
 
+  const fetchNotifications = async (userId: string) => {
+    try {
+      // Get the last 24 hours of messages that might contain notifications
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      
+      // Get all chats where the user is a claimer
+      const { data: chats, error: chatsError } = await supabase
+        .from('chats')
+        .select('id, post_id')
+        .eq('claimer_id', userId)
+      
+      if (chatsError) {
+        console.error('Error fetching chats:', chatsError)
+        return
+      }
+      
+      if (!chats || chats.length === 0) return
+      
+      const chatIds = chats.map(chat => chat.id)
+      const postIds = chats.map(chat => chat.post_id).filter(Boolean)
+      
+      // Get messages that might be notifications
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('id, content, created_at, chat_id, user_id')
+        .in('chat_id', chatIds)
+        .gt('created_at', yesterday.toISOString())
+        .order('created_at', { ascending: false })
+      
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError)
+        return
+      }
+      
+      if (!messages || messages.length === 0) return
+      
+      // Get post information
+      const { data: posts, error: postsError } = await supabase
+        .from('posts')
+        .select('id, title, user_id')
+        .in('id', postIds)
+      
+      if (postsError) {
+        console.error('Error fetching posts:', postsError)
+        return
+      }
+      
+      // Get post owner information
+      const ownerIds = posts?.map(post => post.user_id).filter(Boolean) || []
+      
+      let owners: Owner[] = [];
+      if (ownerIds.length > 0) {
+        console.log('Fetching users for owner IDs:', ownerIds);
+        try {
+          const { data: ownersData, error: ownersError } = await supabase
+            .from('users')
+            .select('id, first_name, last_name')
+            .in('id', ownerIds)
+          
+          if (ownersError) {
+            console.error('Error fetching post owners:', ownersError)
+            // Continue with empty owners array
+          } else {
+            owners = ownersData || []
+            console.log('Successfully fetched owners:', owners.length);
+          }
+        } catch (e) {
+          console.error('Exception during owner fetch:', e);
+          // Continue with empty owners array
+        }
+      } else {
+        console.log('No owner IDs to fetch');
+      }
+      
+      // Create a map for easier lookup
+      const postMap: Record<string, any> = {}
+      posts?.forEach(post => { postMap[post.id] = post })
+      
+      const ownerMap: Record<string, Owner> = {}
+      owners.forEach(owner => { ownerMap[owner.id] = owner })
+      
+      const chatToPostMap: Record<string, string> = {}
+      chats.forEach(chat => { chatToPostMap[chat.id] = chat.post_id })
+      
+      // Filter and format notifications - no filtering based on recipient_id
+      const notificationMessages = messages.filter(msg => 
+        msg.content.includes('has accepted') || 
+        msg.content.includes('has rejected')
+      )
+      
+      const formattedNotifications: Notification[] = notificationMessages.map(msg => {
+        const postId = chatToPostMap[msg.chat_id]
+        const post = postMap[postId]
+        const owner = post ? ownerMap[post.user_id] : null
+        
+        const isAccepted = msg.content.includes('has accepted')
+        const ownerName = owner ? `${owner.first_name} ${owner.last_name}`.trim() : 'Someone'
+        
+        return {
+          type: isAccepted ? 'accepted' : 'rejected',
+          postTitle: post?.title || 'Unknown item',
+          ownerName,
+          timestamp: new Date(msg.created_at).toLocaleString()
+        }
+      })
+      
+      setNotifications(formattedNotifications)
+      
+      // Show notifications if there are any
+      if (formattedNotifications.length > 0) {
+        setShowNotifications(true)
+      }
+      
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+    }
+  }
+
   const processClaimsData = async (claims: any[]) => {
     // For each claim, fetch the associated post and claimer details
     const claimsWithDetails = await Promise.all(claims.map(async (claim) => {
@@ -150,8 +282,8 @@ export default function ClaimsPage() {
       
       // Fetch claimer details
       const { data: claimerData } = await supabase
-        .from('profiles')
-        .select('*')
+        .from('users')
+        .select('id, first_name, last_name, email')
         .eq('id', claim.user_id)
         .single()
       
@@ -175,17 +307,26 @@ export default function ClaimsPage() {
         .eq('id', questionnaire.post_id)
         .single()
       
-      // Fetch claimer details
+      // Fetch claimer details from users table instead of profiles
       const { data: claimerData } = await supabase
-        .from('profiles')
-        .select('*')
+        .from('users')
+        .select('id, first_name, last_name, email')
         .eq('id', questionnaire.claimer_id)
         .single()
+      
+      // Include questionnaire details
+      const questionnaireData = {
+        when_lost: questionnaire.lost_date,
+        specific_details: questionnaire.specific_details,
+        has_picture: questionnaire.has_picture,
+        picture_url: questionnaire.picture_url
+      };
       
       return {
         ...questionnaire,
         post: postData || {},
-        claimer: claimerData || {}
+        claimer: claimerData || {},
+        questionnaire_data: questionnaireData
       }
     }))
     
@@ -199,6 +340,32 @@ export default function ClaimsPage() {
 
   const handleApproveClaim = async (claimId: string, postId: string, claimerId: string) => {
     try {
+      // Get post title
+      const { data: postData, error: postFetchError } = await supabase
+        .from('posts')
+        .select('title')
+        .eq('id', postId)
+        .single()
+        
+      if (postFetchError) {
+        console.error('Error getting post data:', postFetchError)
+        toast.error('Failed to get post information')
+        return
+      }
+      
+      // Get claimer name
+      const { data: claimerData, error: claimerError } = await supabase
+        .from('users')
+        .select('first_name')
+        .eq('id', claimerId)
+        .single()
+        
+      if (claimerError) {
+        console.error('Error getting claimer data:', claimerError)
+        toast.error('Failed to get claimer information')
+        return
+      }
+      
       // First update the claim status
       const updateTable = async (table: string) => {
         const { error } = await supabase
@@ -223,8 +390,8 @@ export default function ClaimsPage() {
         }
       }
       
-      // Then update the post status
-      const { error: postError } = await supabase
+      // Then update the post status - include claimer_id since it exists in the posts table
+      const { error: postUpdateError } = await supabase
         .from('posts')
         .update({ 
           status: 'claimed',
@@ -232,10 +399,105 @@ export default function ClaimsPage() {
         })
         .eq('id', postId)
       
-      if (postError) {
-        console.error('Error updating post status:', postError)
+      if (postUpdateError) {
+        console.error('Error updating post status:', postUpdateError)
         toast.error('Failed to update post status')
         return
+      }
+      
+      // Find or create the chat between the owner and claimer
+      let chatId;
+      
+      // First try to find an existing chat
+      const { data: existingChat, error: findChatError } = await supabase
+        .from('chats')
+        .select('id')
+        .eq('post_id', postId)
+        .single()
+      
+      if (findChatError) {
+        console.log('No existing chat found, creating a new one')
+        
+        // Get the post owner's ID
+        const { data: postData, error: postOwnerError } = await supabase
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .single()
+          
+        if (postOwnerError) {
+          console.error('Error getting post owner:', postOwnerError)
+          toast.error('Failed to get post owner information')
+          return
+        }
+        
+        // Create a new chat
+        const { data: newChat, error: createChatError } = await supabase
+          .from('chats')
+          .insert({
+            post_id: postId,
+            creator_id: postData.user_id,
+            claimer_id: claimerId,
+            created_at: new Date().toISOString()
+          })
+          .select('id')
+          .single()
+        
+        if (createChatError) {
+          console.error('Error creating chat:', createChatError)
+          toast.error('Failed to create chat')
+          return
+        }
+        
+        chatId = newChat.id
+      } else {
+        chatId = existingChat.id
+      }
+      
+      // Now we have a valid chatId, send the notification message
+      // Get the post owner's ID first
+      const { data: postOwnerData, error: postOwnerError } = await supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .single()
+        
+      if (postOwnerError) {
+        console.error('Error getting post owner:', postOwnerError)
+        toast.error('Failed to get post owner information')
+        return
+      }
+      
+      // Now get the post owner's name from the users table
+      const { data: ownerUserData, error: ownerUserError } = await supabase
+        .from('users')
+        .select('first_name, last_name')
+        .eq('id', postOwnerData.user_id)
+        .single()
+        
+      if (ownerUserError) {
+        console.error('Error getting post owner user data:', ownerUserError)
+        toast.error('Failed to get post owner information')
+        return
+      }
+      
+      // Get post owner's name
+      let ownerName = "Someone"
+      if (ownerUserData) {
+        ownerName = `${ownerUserData.first_name} ${ownerUserData.last_name || ''}`.trim()
+      }
+      
+      // Send a single notification message in the chat that both users can see
+      const { error: chatMessageError } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          user_id: postOwnerData.user_id,
+          content: `${ownerName} has accepted ${claimerData.first_name}'s claim for "${postData.title}". Start chatting!`
+        })
+        
+      if (chatMessageError) {
+        console.error('Error sending chat notification message:', chatMessageError)
       }
       
       toast.success('Claim approved successfully')
@@ -253,8 +515,34 @@ export default function ClaimsPage() {
     }
   }
 
-  const handleRejectClaim = async (claimId: string) => {
+  const handleRejectClaim = async (claimId: string, postId: string, claimerId: string) => {
     try {
+      // Get post title
+      const { data: postData, error: postFetchError } = await supabase
+        .from('posts')
+        .select('title')
+        .eq('id', postId)
+        .single()
+        
+      if (postFetchError) {
+        console.error('Error getting post data:', postFetchError)
+        toast.error('Failed to get post information')
+        return
+      }
+      
+      // Get claimer name
+      const { data: claimerData, error: claimerError } = await supabase
+        .from('users')
+        .select('first_name')
+        .eq('id', claimerId)
+        .single()
+        
+      if (claimerError) {
+        console.error('Error getting claimer data:', claimerError)
+        toast.error('Failed to get claimer information')
+        return
+      }
+      
       // First update the claim status
       const updateTable = async (table: string) => {
         const { error } = await supabase
@@ -279,6 +567,116 @@ export default function ClaimsPage() {
         }
       }
       
+      // Then update the post status for rejected claims
+      const { error: postUpdateError } = await supabase
+        .from('posts')
+        .update({ 
+          status: 'active', // Reset to active since the claim was rejected
+          claimer_id: null  // Clear the claimer_id
+        })
+        .eq('id', postId)
+      
+      if (postUpdateError) {
+        console.error('Error updating post status:', postUpdateError)
+        toast.error('Failed to update post status')
+        return
+      }
+      
+      // Find or create the chat between the owner and claimer
+      let chatId;
+      
+      // First try to find an existing chat
+      const { data: existingChat, error: findChatError } = await supabase
+        .from('chats')
+        .select('id')
+        .eq('post_id', postId)
+        .single()
+      
+      if (findChatError) {
+        console.log('No existing chat found, creating a new one')
+        
+        // Get the post owner's ID
+        const { data: postData, error: postOwnerError } = await supabase
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .single()
+          
+        if (postOwnerError) {
+          console.error('Error getting post owner:', postOwnerError)
+          toast.error('Failed to get post owner information')
+          return
+        }
+        
+        // Create a new chat
+        const { data: newChat, error: createChatError } = await supabase
+          .from('chats')
+          .insert({
+            post_id: postId,
+            creator_id: postData.user_id,
+            claimer_id: claimerId,
+            created_at: new Date().toISOString()
+          })
+          .select('id')
+          .single()
+        
+        if (createChatError) {
+          console.error('Error creating chat:', createChatError)
+          toast.error('Failed to create chat')
+          return
+        }
+        
+        chatId = newChat.id
+      } else {
+        chatId = existingChat.id
+      }
+      
+      // Now we have a valid chatId, send the notification message
+      // Get the post owner's ID first
+      const { data: postOwnerData, error: postOwnerError } = await supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .single()
+        
+      if (postOwnerError) {
+        console.error('Error getting post owner:', postOwnerError)
+        toast.error('Failed to get post owner information')
+        return
+      }
+      
+      // Now get the post owner's name from the users table
+      const { data: ownerUserData, error: ownerUserError } = await supabase
+        .from('users')
+        .select('first_name, last_name')
+        .eq('id', postOwnerData.user_id)
+        .single()
+        
+      if (ownerUserError) {
+        console.error('Error getting post owner user data:', ownerUserError)
+        toast.error('Failed to get post owner information')
+        return
+      }
+      
+      // Get post owner's name
+      let ownerName = "Someone"
+      if (ownerUserData) {
+        ownerName = `${ownerUserData.first_name} ${ownerUserData.last_name || ''}`.trim()
+      }
+      
+      // Send a single notification message in the chat that both users can see
+      const { error: chatMessageError } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          user_id: postOwnerData.user_id,
+          content: `${ownerName} has rejected ${claimerData.first_name}'s claim for "${postData.title}".`
+        })
+        
+      if (chatMessageError) {
+        console.error('Error sending chat notification message:', chatMessageError)
+      }
+      
       toast.success('Claim rejected successfully')
       
       // Refresh the claim requests
@@ -297,6 +695,46 @@ export default function ClaimsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">Claim Requests</h1>
+      
+      {/* Notification alerts */}
+      {showNotifications && notifications.length > 0 && (
+        <div className="mb-6">
+          {notifications.map((notification, index) => (
+            <div 
+              key={index} 
+              className={`mb-3 p-4 rounded-md shadow-md flex justify-between items-center ${
+                notification.type === 'accepted' ? 'bg-green-100 border-l-4 border-green-500' : 'bg-red-100 border-l-4 border-red-500'
+              }`}
+            >
+              <div>
+                <p className="font-medium">
+                  {notification.type === 'accepted' 
+                    ? `Your claim for "${notification.postTitle}" has been accepted` 
+                    : `Your claim for "${notification.postTitle}" has been rejected`
+                  } by {notification.ownerName}
+                </p>
+                <p className="text-sm text-gray-600">{notification.timestamp}</p>
+              </div>
+              <button 
+                onClick={() => {
+                  const newNotifications = [...notifications]
+                  newNotifications.splice(index, 1)
+                  setNotifications(newNotifications)
+                  if (newNotifications.length === 0) {
+                    setShowNotifications(false)
+                  }
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <span className="sr-only">Dismiss</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       
       {loading ? (
         <div className="flex justify-center items-center h-64">
@@ -360,7 +798,7 @@ export default function ClaimsPage() {
                       Approve
                     </button>
                     <button
-                      onClick={() => handleRejectClaim(claim.id)}
+                      onClick={() => handleRejectClaim(claim.id, claim.post_id, claim.claimer_id)}
                       className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
                     >
                       Reject
@@ -448,7 +886,7 @@ export default function ClaimsPage() {
                     Approve Claim
                   </button>
                   <button
-                    onClick={() => handleRejectClaim(selectedClaim.id)}
+                    onClick={() => handleRejectClaim(selectedClaim.id, selectedClaim.post_id, selectedClaim.claimer_id)}
                     className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
                   >
                     Reject Claim

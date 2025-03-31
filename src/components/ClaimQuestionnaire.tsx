@@ -92,6 +92,46 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
         return
       }
       
+      // Check if the user has already claimed this item (server-side check)
+      const { data: existingClaims, error: checkError } = await supabase
+        .from('claim_questionnaire')
+        .select('id, status')
+        .eq('post_id', post.id)
+        .eq('claimer_id', userId)
+      
+      if (checkError) {
+        console.error('Error checking existing claims:', checkError)
+        // If there's an error checking claim_questionnaire, try the claims table
+        const { data: existingClaimsAlt, error: checkErrorAlt } = await supabase
+          .from('claims')
+          .select('id, status')
+          .eq('post_id', post.id)
+          .eq('user_id', userId)
+        
+        if (!checkErrorAlt && existingClaimsAlt && existingClaimsAlt.length > 0) {
+          toast.error('You have already claimed this item')
+          setIsSubmitting(false)
+          return
+        }
+      } else if (existingClaims && existingClaims.length > 0) {
+        toast.error('You have already claimed this item')
+        setIsSubmitting(false)
+        return
+      }
+      
+      // Also check if the post is already claimed
+      const { data: postData, error: postError } = await supabase
+        .from('posts')
+        .select('status')
+        .eq('id', post.id)
+        .single()
+      
+      if (!postError && postData && postData.status !== 'active') {
+        toast.error('This item has already been claimed')
+        setIsSubmitting(false)
+        return
+      }
+      
       // Upload picture if provided
       let pictureUrl = null
       if (pictureFile) {
@@ -121,7 +161,7 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
         .insert({
           post_id: post.id,
           claimer_id: userId,
-          when_lost: whenLost,
+          lost_date: whenLost,
           specific_details: specificDetails,
           has_picture: hasPicture,
           picture_url: pictureUrl,

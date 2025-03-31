@@ -12,6 +12,7 @@ export default function Navbar() {
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showChatMenu, setShowChatMenu] = useState(false)
   const [notifications, setNotifications] = useState<number>(0)
+  const [notificationsViewed, setNotificationsViewed] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -31,6 +32,8 @@ export default function Navbar() {
           table: 'claim_questionnaire'
         }, () => {
           fetchNotifications(userId)
+          // Reset the viewed status when new notifications arrive
+          setNotificationsViewed(false)
         })
         .subscribe()
       
@@ -179,7 +182,10 @@ export default function Navbar() {
           {/* Notification Bell */}
           <div className="relative mx-4 flex items-center h-10">
             <button
-              onClick={() => router.push('/claims')}
+              onClick={() => {
+                setNotificationsViewed(true);
+                router.push('/claims');
+              }}
               className="text-gray-500 hover:text-gray-700 relative flex items-center justify-center h-full"
               aria-label="View claim requests"
             >
@@ -201,7 +207,9 @@ export default function Navbar() {
                   <span className="absolute -top-1 -right-1 bg-[#57068B] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     {notifications}
                   </span>
-                  <span className="absolute inset-0 animate-ping rounded-full bg-[#57068B] opacity-75"></span>
+                  {!notificationsViewed && (
+                    <span className="absolute inset-0 animate-ping rounded-full bg-[#57068B] opacity-75"></span>
+                  )}
                 </>
               )}
             </button>

@@ -40,7 +40,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([])
   const [currentUserId, setCurrentUserId] = useState<string>('')
-  const [userPendingClaims, setUserPendingClaims] = useState<string[]>([])
+  const [userClaims, setUserClaims] = useState<{[postId: string]: string}>({})
   const [showQuestionnaire, setShowQuestionnaire] = useState(false)
   const postCardRef = useRef<HTMLDivElement>(null)
   const [postCardWidth, setPostCardWidth] = useState<number>(300)
@@ -65,7 +65,7 @@ export default function Dashboard() {
           
           // Fetch posts now that we know the user is authenticated
           fetchPosts()
-          fetchUserPendingClaims()
+          fetchUserClaims(session.user.id)
         } else {
           console.log('No active session found')
           router.push('/auth')
@@ -157,42 +157,48 @@ export default function Dashboard() {
     }
   }
 
-  const fetchUserPendingClaims = async () => {
-    if (!currentUserId) return
+  const fetchUserClaims = async (userId: string) => {
+    if (!userId) return
     
     try {
-      // First try to fetch from claim_questionnaire table
-      let { data, error } = await supabase
+      // Fetch all claims by the user (not just pending ones)
+      let { data: claimData, error: claimError } = await supabase
         .from('claim_questionnaire')
-        .select('post_id')
-        .eq('claimer_id', currentUserId)
-        .eq('status', 'pending')
+        .select('post_id, status')
+        .eq('claimer_id', userId)
       
       // If there's an error (likely table doesn't exist), try the claims table instead
-      if (error) {
-        console.log('Trying claims table instead:', error.message)
+      if (claimError) {
+        console.log('Trying claims table instead:', claimError.message)
         
         const { data: claimsData, error: claimsError } = await supabase
           .from('claims')
-          .select('post_id')
-          .eq('user_id', currentUserId)
-          .eq('status', 'pending')
+          .select('post_id, status')
+          .eq('user_id', userId)
         
         if (claimsError) {
           console.log('Error fetching from claims table:', claimsError)
-          // If both tables fail, just set an empty array
-          setUserPendingClaims([])
+          // If both tables fail, just set an empty object
+          setUserClaims({})
           return
         }
         
-        data = claimsData
+        claimData = claimsData
       }
       
-      setUserPendingClaims(data?.map(claim => claim.post_id) || [])
+      // Create a map of post_id to status
+      const claimsMap: {[postId: string]: string} = {}
+      if (claimData) {
+        claimData.forEach(claim => {
+          claimsMap[claim.post_id] = claim.status
+        })
+      }
+      
+      setUserClaims(claimsMap)
     } catch (error) {
-      console.error('Error fetching pending claims:', error)
-      // In case of any other error, set an empty array
-      setUserPendingClaims([])
+      console.error('Error fetching user claims:', error)
+      // In case of any other error, set an empty object
+      setUserClaims({})
     }
   }
 
@@ -307,7 +313,15 @@ export default function Dashboard() {
   const handleQuestionnaireSubmitSuccess = () => {
     setShowQuestionnaire(false)
     setSelectedPost(null)
-    fetchUserPendingClaims()
+    
+    // Update the user claims immediately after submission
+    if (selectedPost && currentUserId) {
+      setUserClaims(prev => ({
+        ...prev,
+        [selectedPost.id]: 'pending'
+      }))
+    }
+    
     toast.success('Claim request submitted, waiting for the owner to verify')
   }
 
@@ -455,12 +469,14 @@ export default function Dashboard() {
                       >
                         Cannot Claim
                       </button>
-                    ) : userPendingClaims.includes(post.id) ? (
+                    ) : userClaims[post.id] ? (
                       <button
                         disabled
                         className="w-full px-4 py-2 rounded-md bg-gray-300 cursor-not-allowed"
                       >
-                        Claim Pending
+                        {userClaims[post.id] === 'pending' ? 'Claim Pending' : 
+                         userClaims[post.id] === 'approved' ? 'Claim Approved' : 
+                         'Claim Rejected'}
                       </button>
                     ) : (
                       <button

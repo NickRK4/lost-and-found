@@ -104,23 +104,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         // Fetch creator data
         const { data: creatorData, error: creatorError } = await supabase
           .from('users')
-          .select('first_name, last_name')
+          .select('id, first_name, last_name, email')
           .eq('id', chatData.creator_id)
           .single()
 
         if (creatorError) {
           console.error('Error fetching creator:', creatorError)
+          // Continue with default values
         }
 
         // Fetch user data (claimer)
         const { data: claimerData, error: claimerError } = await supabase
           .from('users')
-          .select('first_name, last_name')
+          .select('id, first_name, last_name, email')
           .eq('id', chatData.claimer_id)
           .single()
 
         if (claimerError) {
           console.error('Error fetching claimer:', claimerError)
+          // Continue with default values
         }
 
         const formattedChat: ChatData = {
