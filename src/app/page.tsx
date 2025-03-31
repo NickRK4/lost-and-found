@@ -10,22 +10,22 @@ export default function MainPage() {
       id: 1,
       name: "Sarah Johnson",
       avatar: "/avatars/avatar1.jpg",
-      review: "I lost my wedding ring at the park and was devastated. Someone found it and posted it on Lost&Found. Within hours, I was able to get it back! This service is a lifesaver.",
-      item: "Wedding Ring"
+      review: "I lost my PHD Physics textbook at Bobst and was completely devastated since it was an expensive one! I checked out Lost&Found and was able to collect it from a classmate.",
+      item: "Physics Textbook"
     },
     {
       id: 2,
-      name: "Michael Chen",
+      name: "Joe Thompson",
       avatar: "/avatars/avatar2.jpg",
-      review: "My daughter left her favorite teddy bear on the bus. Thanks to Lost&Found, the bus driver was able to post it and we connected right away. My daughter couldn't be happier!",
-      item: "Teddy Bear"
+      review: "I left my guitar on the NYU shuttle bus and connected straight away with the person who found it. We exchanged it at Washington Square same day and I was able to make my class!",
+      item: "Guitar"
     },
     {
       id: 3,
       name: "Emily Rodriguez",
       avatar: "/avatars/avatar3.jpg",
-      review: "I found an expensive laptop at a coffee shop and wanted to return it to its owner. Posted it on Lost&Found and connected with the owner who was a student about to submit their thesis. So glad I could help!",
-      item: "Laptop"
+      review: "I left my limited edition Courant sweatshirt in the Math classroom and forgot about it for two days! After logging in, I immediately found the post for it and collected it the next day.",
+      item: "Sweatshirt"
     }
   ]
 
@@ -263,7 +263,7 @@ export default function MainPage() {
                 Lost&Found
               </Link>
               <p className="text-gray-500 text-base">
-                Helping people reconnect with their lost items since 2023.
+                Helping people reconnect with their lost items.
               </p>
               <div className="flex space-x-6">
                 <a href="#" className="text-gray-400 hover:text-gray-500">
@@ -280,28 +280,8 @@ export default function MainPage() {
                 </a>
               </div>
             </div>
-            <div className="mt-12 grid grid-cols-2 gap-8 xl:mt-0 xl:col-span-2">
-              <div className="md:grid md:grid-cols-2 md:gap-8">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Solutions</h3>
-                  <ul className="mt-4 space-y-4">
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Lost Items
-                      </a>
-                    </li>
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Found Items
-                      </a>
-                    </li>
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Success Stories
-                      </a>
-                    </li>
-                  </ul>
-                </div>
+            <div className="mt-2 ml-8 gcrid grid-cols-2 gap-4 xl:mt-0 xl:col-span-2">
+              <div className="md:grid md:grid-cols-2 md:gap-4">
                 <div className="mt-12 md:mt-0">
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Support</h3>
                   <ul className="mt-4 space-y-4">
@@ -315,41 +295,16 @@ export default function MainPage() {
                         Contact Us
                       </a>
                     </li>
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Privacy
-                      </a>
-                    </li>
                   </ul>
                 </div>
               </div>
               <div className="md:grid md:grid-cols-2 md:gap-8">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Company</h3>
-                  <ul className="mt-4 space-y-4">
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        About
-                      </a>
-                    </li>
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Blog
-                      </a>
-                    </li>
-                    <li>
-                      <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Careers
-                      </a>
-                    </li>
-                  </ul>
-                </div>
                 <div className="mt-12 md:mt-0">
                   <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Legal</h3>
                   <ul className="mt-4 space-y-4">
                     <li>
                       <a href="#" className="text-base text-gray-500 hover:text-gray-900">
-                        Privacy Policy
+                        Claims Policy
                       </a>
                     </li>
                     <li>
@@ -364,7 +319,7 @@ export default function MainPage() {
           </div>
           <div className="mt-12 border-t border-gray-200 pt-8">
             <p className="text-base text-gray-400 text-center">
-              &copy; 2023 Lost&Found. All rights reserved.
+              &copy; 2025 Lost&Found. All rights reserved.
             </p>
           </div>
         </div>

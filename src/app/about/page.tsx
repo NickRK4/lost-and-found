@@ -199,20 +199,16 @@ export default function AboutPage() {
             </p>
             <div className="bg-white shadow overflow-hidden sm:rounded-lg">
               <div className="px-4 py-5 sm:p-6">
-                <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
-                  <div className="sm:col-span-1">
+                <dl className="pl-10 pr-10 flex justify-between space-x-4">
+                  <div>
                     <dt className="text-sm font-medium text-gray-500">Email</dt>
                     <dd className="mt-1 text-sm text-gray-900">support@lostandfound.com</dd>
                   </div>
-                  <div className="sm:col-span-1">
-                    <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                    <dd className="mt-1 text-sm text-gray-900">+1 (555) 123-4567</dd>
-                  </div>
-                  <div className="sm:col-span-2">
+                  <div>
                     <dt className="text-sm font-medium text-gray-500">Address</dt>
                     <dd className="mt-1 text-sm text-gray-900">
-                      123 Main Street<br />
-                      New York, NY 10001<br />
+                      Washington Square Park <br />
+                      New York, NY 10003<br />
                       United States
                     </dd>
                   </div>
