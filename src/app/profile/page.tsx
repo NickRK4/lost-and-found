@@ -64,18 +64,50 @@ export default function Profile() {
             defaultFirstName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
           }
           
-          const { error: createError } = await supabase
+          // First check if a user with this email already exists
+          const { data: existingUser, error: existingUserError } = await supabase
             .from('users')
-            .insert([{ 
-              id: user.id,
-              email: user.email,
-              first_name: defaultFirstName,
-              last_name: defaultLastName
-            }])
+            .select('id')
+            .eq('email', user.email)
+            .maybeSingle()
           
-          if (createError) {
-            console.error('Error creating profile:', createError)
-            setError('Failed to create profile: ' + createError.message)
+          if (existingUserError && existingUserError.code !== 'PGRST116') {
+            console.error('Error checking existing user:', existingUserError)
+            setError('Failed to check existing profile: ' + existingUserError.message)
+            return
+          }
+          
+          let profileError = null
+          
+          if (existingUser) {
+            // If user with this email exists, update it with the current auth user's ID
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ 
+                id: user.id,
+                first_name: defaultFirstName,
+                last_name: defaultLastName
+              })
+              .eq('email', user.email)
+            
+            profileError = updateError
+          } else {
+            // If no user with this email exists, create a new one
+            const { error: createError } = await supabase
+              .from('users')
+              .insert([{ 
+                id: user.id,
+                email: user.email,
+                first_name: defaultFirstName,
+                last_name: defaultLastName
+              }])
+            
+            profileError = createError
+          }
+          
+          if (profileError) {
+            console.error('Error creating/updating profile:', profileError)
+            setError('Failed to create profile: ' + profileError.message)
           } else {
             setFirstName(defaultFirstName)
             setLastName(defaultLastName)
