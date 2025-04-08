@@ -25,40 +25,6 @@ interface Chat {
   }[]
 }
 
-interface SupabaseChat {
-  id: string
-  post_id: string
-  creator_id: string
-  claimer_id: string
-  posts: {
-    title: string
-  } | {
-    title: string
-  }[]
-  creator: {
-    id: string
-    first_name: string
-    last_name: string
-  } | {
-    id: string
-    first_name: string
-    last_name: string
-  }[]
-  user: {
-    id: string
-    first_name: string
-    last_name: string
-  } | {
-    id: string
-    first_name: string
-    last_name: string
-  }[]
-  messages: {
-    content: string
-    created_at: string
-  }[]
-}
-
 export default function ChatList({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
@@ -117,12 +83,12 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
         const postsMap = (postsData || []).reduce((map, post) => {
           map[post.id] = post
           return map
-        }, {} as Record<string, any>)
+        }, {} as Record<string, { id: string; title: string }>)
 
         const usersMap = (usersData || []).reduce((map, user) => {
           map[user.id] = user
           return map
-        }, {} as Record<string, any>)
+        }, {} as Record<string, { id: string; first_name: string; last_name: string }>)
 
         // Process each chat
         const formattedChats: Chat[] = await Promise.all(chatsData.map(async (chat) => {
@@ -202,7 +168,7 @@ export default function ChatList({ onClose }: { onClose?: () => void }) {
           <Link
             key={chat.id}
             href={`/chat/${chat.id}`}
-            onClick={(e) => {
+            onClick={() => {
               onClose?.();
             }}
             className="block p-3 rounded-lg hover:bg-[#861397]/10 transition-colors"

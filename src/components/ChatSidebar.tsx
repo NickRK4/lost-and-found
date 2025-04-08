@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
-import { MessageSquare } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 interface Chat {
@@ -127,16 +126,19 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
         // Extract the post data (it comes as an array with one object or as a single object)
         const postData = Array.isArray(chat.posts) && chat.posts.length > 0
           ? chat.posts[0]
-          : (chat.posts as any) || { id: '', title: 'Unknown Post', image_url: '', description: '', created_at: new Date().toISOString() }
+          : (chat.posts as { id: string; title: string; image_url: string; description: string; created_at: string }) || 
+            { id: '', title: 'Unknown Post', image_url: '', description: '', created_at: new Date().toISOString() }
         
         // Extract the user data (it comes as an array with one object or as a single object)
         const creatorData = Array.isArray(chat.creator) && chat.creator.length > 0
           ? chat.creator[0]
-          : (chat.creator as any) || { first_name: 'Unknown', last_name: '' }
+          : (chat.creator as { first_name?: string; last_name?: string }) || 
+            { first_name: 'Unknown', last_name: '' }
         
         const claimerData = Array.isArray(chat.claimer) && chat.claimer.length > 0
           ? chat.claimer[0]
-          : (chat.claimer as any) || { first_name: 'Unknown', last_name: '' }
+          : (chat.claimer as { first_name?: string; last_name?: string }) || 
+            { first_name: 'Unknown', last_name: '' }
 
         return {
           id: chat.id,

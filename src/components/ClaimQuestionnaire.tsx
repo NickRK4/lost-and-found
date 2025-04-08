@@ -136,7 +136,7 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
       let pictureUrl = null
       if (pictureFile) {
         const fileName = `${userId}_${Date.now()}_${pictureFile.name}`
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('claim-pictures')
           .upload(fileName, pictureFile)
         

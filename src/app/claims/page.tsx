@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -62,7 +62,7 @@ export default function ClaimsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifications, setShowNotifications] = useState(false)
 
-  const fetchClaimRequests = async (userId: string) => {
+  const fetchClaimRequests = useCallback(async (userId: string) => {
     setLoading(true)
     
     try {
@@ -127,7 +127,7 @@ export default function ClaimsPage() {
       console.error('Error in fetchClaimRequests:', error)
       setLoading(false)
     }
-  }
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -229,20 +229,31 @@ export default function ClaimsPage() {
       
       // Create a map for easier lookup
       const postMap: Record<string, Post> = {}
-      posts?.forEach(post => { 
+      posts?.forEach((post: {
+        id: string;
+        title: string;
+        user_id: string;
+        description?: string;
+        location?: string;
+        image_url?: string;
+        created_at?: string;
+        first_name?: string;
+        last_name?: string;
+        status?: string;
+      }) => { 
         // Ensure the post object conforms to the Post interface
         postMap[post.id] = {
           id: post.id,
           title: post.title,
+          user_id: post.user_id,
           description: post.description || '',
           location: post.location || '',
           image_url: post.image_url || '',
           created_at: post.created_at || '',
-          user_id: post.user_id,
           first_name: post.first_name || '',
           last_name: post.last_name || '',
-          status: post.status || 'active'
-        } as Post;
+          status: (post.status as 'active' | 'claimed' | 'resolved') || 'active'
+        };
       })
       
       const ownerMap: Record<string, Owner> = {}

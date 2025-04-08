@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import ChatList from './ChatList'
@@ -13,12 +13,10 @@ export default function Navbar() {
   const [showChatMenu, setShowChatMenu] = useState(false)
   const [notifications, setNotifications] = useState<number>(0)
   const [notificationsViewed, setNotificationsViewed] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
     // Get current user ID from localStorage
     const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null
-    setCurrentUserId(userId)
     
     if (userId) {
       fetchNotifications(userId)
@@ -70,7 +68,7 @@ export default function Navbar() {
       
       try {
         // First try the claim_questionnaire table
-        const { data, error, count: questionnaireCount } = await supabase
+        const { error, count: questionnaireCount } = await supabase
           .from('claim_questionnaire')
           .select('id', { count: 'exact' })
           .in('post_id', postIds)
@@ -80,7 +78,7 @@ export default function Navbar() {
           console.log('Trying claims table instead:', error.message)
           
           // If there's an error, try the claims table
-          const { data: claimsData, error: claimsError, count: claimsCount } = await supabase
+          const { error: claimsError, count: claimsCount } = await supabase
             .from('claims')
             .select('id', { count: 'exact' })
             .in('post_id', postIds)
@@ -103,7 +101,7 @@ export default function Navbar() {
     }
   }
 
-  const handleClickOutside = (e: MouseEvent) => {
+  const handleClickOutside = useCallback((e: MouseEvent) => {
     const target = e.target as HTMLElement
     if (showProfileMenu && target && !target.closest('.profile-menu')) {
       setShowProfileMenu(false)
@@ -113,14 +111,14 @@ export default function Navbar() {
     if (showChatMenu && target && !target.closest('.chat-sidebar') && !target.closest('.chat-menu-button')) {
       setShowChatMenu(false)
     }
-  }
+  }, [showProfileMenu, showChatMenu]);
 
   useEffect(() => {
     document.addEventListener('click', handleClickOutside)
     return () => {
       document.removeEventListener('click', handleClickOutside)
     }
-  }, [showProfileMenu, showChatMenu])
+  }, [handleClickOutside])
 
   return (
     <nav className="border-b bg-white shadow">

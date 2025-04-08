@@ -5,6 +5,10 @@ export interface Post {
   description: string
   location: string
   created_at: string
+  title?: string
+  first_name?: string
+  last_name?: string
+  status?: 'active' | 'claimed' | 'resolved'
 }
 
 export interface Chat {

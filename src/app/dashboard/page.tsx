@@ -28,6 +28,12 @@ interface Post {
   claimer: {first_name?: string, last_name?: string} | null
 }
 
+// Create a type for a function with a cancel method
+type DebouncedFunctionType = {
+  (query: string, postsArray: Post[]): void;
+  cancel: () => void;
+};
+
 export default function Dashboard() {
   const router = useRouter()
   const [timeRange, setTimeRange] = useState<TimeRange>('7days')
@@ -307,28 +313,34 @@ export default function Dashboard() {
     toast.success('Claim request submitted, waiting for the owner to verify')
   }
 
-  const debouncedSearch = useCallback(
-    debounce((query: string) => {
-      if (!posts.length) return; // Don't run if posts haven't loaded yet
-      
-      const searchFiltered = query
-        ? posts.filter(post =>
-            post.title.toLowerCase().includes(query.toLowerCase()) ||
-            post.description.toLowerCase().includes(query.toLowerCase())
-          )
-        : posts
+  // Create a debounced search function that can be properly canceled
+  const debouncedFunction = useRef(debounce((query: string, postsArray: Post[]) => {
+    if (!postsArray.length) return; // Don't run if posts haven't loaded yet
+    
+    const searchFiltered = query
+      ? postsArray.filter(post =>
+          post.title.toLowerCase().includes(query.toLowerCase()) ||
+          post.description.toLowerCase().includes(query.toLowerCase())
+        )
+      : postsArray
 
-      setFilteredPosts(searchFiltered)
-    }, 300),
-    [posts]
-  )
+    setFilteredPosts(searchFiltered)
+  }, 300)).current;
+  
+  // Wrap it in a stable callback with proper typing
+  const debouncedSearchFn = useCallback((query: string, postsArray: Post[]) => {
+    debouncedFunction(query, postsArray);
+  }, [debouncedFunction]) as DebouncedFunctionType;
+  
+  // Add the cancel property to the function
+  debouncedSearchFn.cancel = debouncedFunction.cancel;
 
   useEffect(() => {
-    debouncedSearch(searchQuery)
+    debouncedSearchFn(searchQuery, posts)
     return () => {
-      debouncedSearch.cancel()
+      debouncedSearchFn.cancel()
     }
-  }, [searchQuery, debouncedSearch, posts])
+  }, [searchQuery, debouncedSearchFn, posts])
 
   const closeExpandedImage = () => {
     setExpandedImage(null)

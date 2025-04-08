@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 
@@ -16,18 +16,6 @@ interface Message {
   }
 }
 
-interface RawMessage {
-  id: string
-  content: string
-  created_at: string
-  user_id: string
-  is_system_message?: boolean
-  sender: {
-    first_name?: string
-    last_name?: string
-  }[]
-}
-
 interface ChatMessagesProps {
   chatId: string
 }
@@ -39,109 +27,29 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const currentUserId = localStorage.getItem('user_id')
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
   useEffect(() => {
     if (!chatId) return
 
     const fetchMessages = async () => {
-      setLoading(true)
       try {
-        // Simple query without relationships - just get the messages
-        const { data: messagesData, error } = await supabase
+        const { data, error } = await supabase
           .from('messages')
-          .select('id, content, created_at, user_id')
+          .select('*')
           .eq('chat_id', chatId)
           .order('created_at', { ascending: true })
-
-        if (error) {
-          console.error('Error fetching messages:', error)
-          setLoading(false)
-          return
-        }
-
-        // If no messages, just set empty array and return
-        if (!messagesData || messagesData.length === 0) {
-          setMessages([])
-          setLoading(false)
-          return
-        }
-
-        // Get all user IDs from messages
-        const userIds = [...new Set(messagesData.map(msg => msg.user_id))].filter(Boolean)
         
-        // Create a map for user profiles
-        const userProfileMap: Record<string, any> = {}
+        if (error) throw error
         
-        // Only try to fetch user data if we have user IDs
-        if (userIds.length > 0) {
-          try {
-            // Fetch each user individually to avoid relationship errors
-            for (const userId of userIds) {
-              if (!userId) continue
-              
-              const { data: userData } = await supabase
-                .from('users')
-                .select('first_name, last_name')
-                .eq('id', userId)
-                .single()
-                
-              if (userData) {
-                userProfileMap[userId] = userData
-              }
-            }
-          } catch (userError) {
-            console.error('Error fetching user data:', userError)
-            // Continue with what we have - don't let user data errors stop the chat
-          }
+        if (data) {
+          setMessages(data as Message[])
         }
         
-        // Format messages with user data
-        const formattedMessages: Message[] = messagesData.map(msg => {
-          // Check if this is a system message based on content patterns
-          const isSystemMessage = 
-            msg.content.includes('✅') || 
-            msg.content.includes('❌') || 
-            msg.content.includes('has accepted your claim') ||
-            msg.content.includes('has rejected your claim') ||
-            msg.content.includes('This claim has been');
-          
-          if (isSystemMessage) {
-            return {
-              id: msg.id,
-              content: msg.content,
-              created_at: msg.created_at,
-              user_id: msg.user_id,
-              is_system_message: true,
-              sender: {
-                first_name: 'System',
-                last_name: 'Notification'
-              }
-            }
-          }
-          
-          // For regular messages
-          const isCurrentUser = msg.user_id === currentUserId;
-          const userProfile = userProfileMap[msg.user_id] || {};
-          
-          return {
-            id: msg.id,
-            content: msg.content,
-            created_at: msg.created_at,
-            user_id: msg.user_id,
-            is_system_message: false,
-            sender: {
-              first_name: isCurrentUser ? 'You' : (userProfile.first_name || 'User'),
-              last_name: userProfile.last_name || ''
-            }
-          }
-        })
-        
-        setMessages(formattedMessages)
-      } catch (error) {
-        console.error('Error in fetchMessages:', error)
+      } catch (error: unknown) {
+        console.error('Error fetching messages:', (error as Error).message)
       } finally {
         setLoading(false)
         scrollToBottom()
@@ -241,10 +149,24 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
       )
       .subscribe()
 
+    const messageSubscription = supabase
+      .channel(`chat-${chatId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `chat_id=eq.${chatId}`
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new as Message])
+        scrollToBottom()
+      })
+      .subscribe()
+
     return () => {
       channel.unsubscribe()
+      messageSubscription.unsubscribe()
     }
-  }, [chatId])
+  }, [chatId, currentUserId, scrollToBottom])
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !currentUserId) return

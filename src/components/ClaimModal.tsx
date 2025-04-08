@@ -31,7 +31,6 @@ interface ClaimModalProps {
 
 export default function ClaimModal({ post, onClose, onClaim, isOwnPost, children }: ClaimModalProps) {
   const [coordinates, setCoordinates] = useState<[number, number]>([51.505, -0.09]);
-  const [showMap, setShowMap] = useState(false);
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
 
   useEffect(() => {
