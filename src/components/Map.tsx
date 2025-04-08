@@ -6,8 +6,12 @@ import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 
 // Fix Leaflet icon issues
+interface ExtendedIconPrototype extends L.Icon.Default {
+  _getIconUrl?: unknown;
+}
+
 const fixLeafletIcon = () => {
-  delete (L.Icon.Default.prototype as any)._getIconUrl
+  delete (L.Icon.Default.prototype as ExtendedIconPrototype)._getIconUrl
   
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',

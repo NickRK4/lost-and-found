@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Send, ArrowLeft } from 'lucide-react'
@@ -14,12 +14,62 @@ interface Message {
   created_at: string
 }
 
-export default function ChatRoom({ post }: { post: any }) {
+interface Post {
+  id: string;
+  image_url: string;
+  description: string;
+  created_at: string;
+  user_id: string;
+  chats?: {
+    id: string;
+  }[];
+}
+
+export default function ChatRoom({ post }: { post: Post }) {
   const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [chatId, setChatId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const initializeChat = useCallback(async () => {
+    // Check if chat exists or create new one
+    let chat = post.chats?.[0]
+    
+    if (!chat) {
+      const { data: newChat, error } = await supabase
+        .from('chats')
+        .insert({
+          post_id: post.id,
+          sender_id: 'anonymous', // Will be updated with real user ID
+          receiver_id: post.user_id,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating chat:', error)
+        return
+      }
+      
+      chat = newChat
+    }
+
+    if (chat) {
+      setChatId(chat.id)
+
+      // Fetch existing messages
+      const { data: existingMessages } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chat.id)
+        .order('created_at', { ascending: true })
+
+      if (existingMessages) {
+        setMessages(existingMessages)
+      }
+    }
+  }, [post.chats, post.id, post.user_id])
 
   useEffect(() => {
     // Initialize chat and fetch messages
@@ -45,48 +95,11 @@ export default function ChatRoom({ post }: { post: any }) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [chatId, post.id])
+  }, [chatId, post.id, initializeChat])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
-
-  const initializeChat = async () => {
-    // Check if chat exists or create new one
-    let chat = post.chats?.[0]
-    
-    if (!chat) {
-      const { data: newChat, error } = await supabase
-        .from('chats')
-        .insert({
-          post_id: post.id,
-          sender_id: 'anonymous', // Will be updated with real user ID
-          receiver_id: post.user_id,
-        })
-        .select()
-        .single()
-
-      if (error) {
-        console.error('Error creating chat:', error)
-        return
-      }
-      
-      chat = newChat
-    }
-
-    setChatId(chat.id)
-
-    // Fetch existing messages
-    const { data: existingMessages } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('chat_id', chat.id)
-      .order('created_at', { ascending: true })
-
-    if (existingMessages) {
-      setMessages(existingMessages)
-    }
-  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

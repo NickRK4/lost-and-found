@@ -114,8 +114,8 @@ export default function Profile() {
             setSuccess('Profile created successfully!')
           }
         }
-      } catch (error: any) {
-        console.error('Error in profile setup:', error.message)
+      } catch (error: unknown) {
+        console.error('Error in profile setup:', (error as Error).message)
         setError('Failed to load profile')
       } finally {
         setIsLoading(false)
@@ -130,8 +130,8 @@ export default function Profile() {
     try {
       await supabase.auth.signOut()
       router.push('/auth')
-    } catch (error: any) {
-      console.error('Error signing out:', error.message)
+    } catch (error: unknown) {
+      console.error('Error signing out:', (error as Error).message)
       setError('Failed to sign out')
       setIsLoading(false)
     }
@@ -171,8 +171,8 @@ export default function Profile() {
       // Sign out
       await supabase.auth.signOut()
       router.push('/auth')
-    } catch (error: any) {
-      console.error('Error deleting account:', error.message)
+    } catch (error: unknown) {
+      console.error('Error deleting account:', (error as Error).message)
       setError('Failed to delete account')
       setIsLoading(false)
       setShowDeleteConfirm(false)

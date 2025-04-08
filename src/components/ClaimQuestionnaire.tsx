@@ -186,9 +186,9 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
       } else {
         onClose()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error submitting claim:', error)
-      toast.error('Failed to submit claim: ' + (error.message || 'Unknown error'))
+      toast.error('Failed to submit claim: ' + ((error as Error)?.message || 'Unknown error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -332,7 +332,7 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
                   className="h-4 w-4 text-[#57068B] focus:ring-[#57068B] border-gray-300 rounded"
                 />
                 <label htmlFor="agreeToPolicy" className="ml-2 block text-sm text-gray-700">
-                  I agree to New York University's safety policy for lost and found items. *{' '}
+                  I agree to New York University&apos;s safety policy for lost and found items. *{' '}
                   <Link href="/" className="text-[#57068B] hover:underline">
                     View Policy
                   </Link>

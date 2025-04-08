@@ -27,7 +27,7 @@ export default function NewPost() {
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
         );
         const data = await response.json();
-        setLocationSuggestions(data.map((item: any) => ({
+        setLocationSuggestions(data.map((item: {display_name: string; lat: string; lon: string}) => ({
           display_name: item.display_name,
           lat: parseFloat(item.lat),
           lon: parseFloat(item.lon)
@@ -56,7 +56,7 @@ export default function NewPost() {
         clearTimeout(locationDebounceTimeout);
       }
     };
-  }, [location])
+  }, [location, locationDebounceTimeout])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -128,9 +128,9 @@ export default function NewPost() {
 
       // Redirect to dashboard page instead of home page
       router.push('/dashboard')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Full error:', error)
-      setError(error.message)
+      setError((error as Error).message || 'An unknown error occurred')
     } finally {
       setLoading(false)
     }
