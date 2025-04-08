@@ -151,7 +151,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       <div className="text-center p-4 max-w-md">
         <div className="text-yellow-500 text-5xl mb-4">&#x1F50D;</div>
         <h2 className="text-xl font-semibold mb-2">Chat Not Found</h2>
-        <p className="text-gray-600 mb-4">The chat you're looking for doesn't exist or has been deleted.</p>
+        <p className="text-gray-600 mb-4">The chat you&apos;re looking for doesn&apos;t exist or has been deleted.</p>
         <Link href="/dashboard" className="text-blue-500 hover:underline">
           Return to Dashboard
         </Link>

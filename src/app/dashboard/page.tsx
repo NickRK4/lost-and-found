@@ -6,11 +6,8 @@ import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import ClaimModal from '@/components/ClaimModal'
 import debounce from 'lodash.debounce'
-import dynamic from 'next/dynamic'
 import toast from 'react-hot-toast'
 import ClaimQuestionnaire from '@/components/ClaimQuestionnaire'
-
-const MapComponent = dynamic(() => import('@/components/Map'), { ssr: false })
 
 type TimeRange = '1day' | '7days' | 'older'
 
@@ -43,49 +40,9 @@ export default function Dashboard() {
   const [userClaims, setUserClaims] = useState<{[postId: string]: string}>({})
   const [showQuestionnaire, setShowQuestionnaire] = useState(false)
   const postCardRef = useRef<HTMLDivElement>(null)
-  const [postCardWidth, setPostCardWidth] = useState<number>(300)
   const [expandedImage, setExpandedImage] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Check if user is logged in using Supabase session
-    const checkAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error checking authentication:', error)
-          router.push('/auth')
-          return
-        }
-        
-        if (session && session.user) {
-          // Save user ID to localStorage for other components that might need it
-          localStorage.setItem('user_id', session.user.id)
-          setCurrentUserId(session.user.id)
-          
-          // Fetch posts now that we know the user is authenticated
-          fetchPosts()
-          fetchUserClaims(session.user.id)
-        } else {
-          console.log('No active session found')
-          router.push('/auth')
-        }
-      } catch (error) {
-        console.error('Unexpected error during auth check:', error)
-        router.push('/auth')
-      }
-    }
-    
-    checkAuth()
-  }, [timeRange, router])
-
-  useEffect(() => {
-    if (postCardRef.current) {
-      setPostCardWidth(postCardRef.current.offsetWidth)
-    }
-  }, [timeRange])
-
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     setLoading(true)
     setPosts([]) // Clear posts immediately to avoid showing stale data
     setFilteredPosts([]) // Clear filtered posts as well
@@ -124,48 +81,73 @@ export default function Dashboard() {
           case '7days':
             return diffDays <= 7
           case 'older':
-            return true
+            return diffDays > 7
           default:
             return true
         }
       })
       
-      // For each post, get claimer info if it exists
-      const postsWithClaimers = await Promise.all(
-        filteredPosts.map(async (post) => {
-          if (post.claimer_id) {
-            const { data: claimer } = await supabase
-              .from('users')
-              .select('first_name, last_name')
-              .eq('id', post.claimer_id)
-              .single()
-            return {
-              ...post,
-              claimer: claimer || null
-            }
-          }
-          return post
-        })
-      )
-      
-      setPosts(postsWithClaimers)
-      setFilteredPosts(postsWithClaimers) // Set filtered posts directly after fetching
+      setPosts(filteredPosts)
+      setFilteredPosts(filteredPosts)
     } catch (error) {
       console.error('Error fetching posts:', error)
+      toast.error('Failed to load posts. Please try again later.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [timeRange]) // Add timeRange as a dependency
+  
+  useEffect(() => {
+    // Check if user is logged in using Supabase session
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error checking authentication:', error)
+          router.push('/auth')
+          return
+        }
+        
+        if (session && session.user) {
+          // Save user ID to localStorage for other components that might need it
+          localStorage.setItem('user_id', session.user.id)
+          setCurrentUserId(session.user.id)
+          
+          // Fetch posts now that we know the user is authenticated
+          fetchPosts()
+          fetchUserClaims(session.user.id)
+        } else {
+          console.log('No active session found')
+          router.push('/auth')
+        }
+      } catch (error) {
+        console.error('Unexpected error during auth check:', error)
+        router.push('/auth')
+      }
+    }
+    
+    checkAuth()
+  }, [timeRange, router, fetchPosts])
+
+  useEffect(() => {
+    if (postCardRef.current) {
+      // Nothing to do here, removed setting postCardWidth
+    }
+  }, [timeRange])
 
   const fetchUserClaims = async (userId: string) => {
     if (!userId) return
     
     try {
       // Fetch all claims by the user (not just pending ones)
-      let { data: claimData, error: claimError } = await supabase
+      let claimData;
+      const { data: initialClaimData, error: claimError } = await supabase
         .from('claim_questionnaire')
         .select('post_id, status')
         .eq('claimer_id', userId)
+      
+      claimData = initialClaimData;
       
       // If there's an error (likely table doesn't exist), try the claims table instead
       if (claimError) {
@@ -261,9 +243,9 @@ export default function Dashboard() {
         console.error('No chat data returned after creation')
         toast.error('Failed to create chat. Please try again.')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error starting chat:', error)
-      toast.error('Failed to start chat: ' + (error.message || 'Unknown error'))
+      toast.error('Failed to start chat: ' + ((error as Error)?.message || 'Unknown error'))
     }
   }
 
@@ -299,9 +281,9 @@ export default function Dashboard() {
       
       // Refresh posts to show updated status
       fetchPosts()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error claiming item:', error)
-      toast.error('Failed to claim item: ' + (error.message || 'Unknown error'))
+      toast.error('Failed to claim item: ' + ((error as Error)?.message || 'Unknown error'))
     }
   }
 
@@ -347,10 +329,6 @@ export default function Dashboard() {
       debouncedSearch.cancel()
     }
   }, [searchQuery, debouncedSearch, posts])
-
-  const handleImageClick = (imageUrl: string) => {
-    setExpandedImage(imageUrl)
-  }
 
   const closeExpandedImage = () => {
     setExpandedImage(null)
@@ -425,7 +403,6 @@ export default function Dashboard() {
                       alt={post.title}
                       fill
                       className="object-cover"
-                      onClick={() => setExpandedImage(post.image_url)}
                     />
                   </div>
                   <div className="p-4">

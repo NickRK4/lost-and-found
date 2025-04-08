@@ -150,7 +150,7 @@ export default function ClaimsPage() {
     }
     
     checkAuth()
-  }, [])
+  }, [fetchClaimRequests])
 
   const fetchNotifications = async (userId: string) => {
     try {
@@ -228,8 +228,22 @@ export default function ClaimsPage() {
       }
       
       // Create a map for easier lookup
-      const postMap: Record<string, any> = {}
-      posts?.forEach(post => { postMap[post.id] = post })
+      const postMap: Record<string, Post> = {}
+      posts?.forEach(post => { 
+        // Ensure the post object conforms to the Post interface
+        postMap[post.id] = {
+          id: post.id,
+          title: post.title,
+          description: post.description || '',
+          location: post.location || '',
+          image_url: post.image_url || '',
+          created_at: post.created_at || '',
+          user_id: post.user_id,
+          first_name: post.first_name || '',
+          last_name: post.last_name || '',
+          status: post.status || 'active'
+        } as Post;
+      })
       
       const ownerMap: Record<string, Owner> = {}
       owners.forEach(owner => { ownerMap[owner.id] = owner })
@@ -748,7 +762,7 @@ export default function ClaimsPage() {
         </div>
       ) : claimRequests.length === 0 ? (
         <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-lg text-gray-600">You don't have any claim requests yet.</p>
+          <p className="text-lg text-gray-600">You don&apos;t have any claim requests yet.</p>
           <Link href="/dashboard" className="mt-4 inline-block px-6 py-2 bg-[#57068B] text-white rounded-md hover:bg-[#6A0BA7]">
             Back to Dashboard
           </Link>
