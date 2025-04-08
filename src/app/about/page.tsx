@@ -180,7 +180,7 @@ export default function AboutPage() {
           <div className="max-w-3xl mx-auto prose prose-lg">
             <h3 className="text-xl font-bold text-gray-900 mb-6">About the Project</h3>
             <p>
-              Lost&Found was created to help people reconnect with their lost items. We understand how frustrating and upsetting it can be to lose something important, which is why we've built this platform to make the process of finding lost items easier.
+              Lost&Found was created to help people reconnect with their lost items. We understand how frustrating and upsetting it can be to lose something important, which is why we&apos;ve built this platform to make the process of finding lost items easier.
             </p>
             <p>
               Our mission is to create a community where people can help each other by posting found items and searching for lost ones. We believe in the power of community and the goodness of people.
@@ -195,7 +195,7 @@ export default function AboutPage() {
           <div className="max-w-3xl mx-auto">
             <h3 className="text-xl font-bold text-gray-900 mb-6">Contact Us</h3>
             <p className="mb-4">
-              If you have any questions, suggestions, or feedback, please don't hesitate to reach out to us. We're always looking to improve our service.
+              If you have any questions, suggestions, or feedback, please don&apos;t hesitate to reach out to us. We&apos;re always looking to improve our service.
             </p>
             <div className="bg-white shadow overflow-hidden sm:rounded-lg">
               <div className="px-4 py-5 sm:p-6">

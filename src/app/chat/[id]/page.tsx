@@ -3,7 +3,6 @@
 import { useEffect, useState, use } from 'react'
 import { supabase } from '@/lib/supabase'
 import ChatMessages from '@/components/ChatMessages'
-import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
 interface ChatData {
@@ -20,34 +19,6 @@ interface ChatData {
     first_name: string
     last_name: string
   }
-}
-
-interface SupabaseChatData {
-  id: string
-  post_id: string
-  creator_id: string
-  claimer_id: string
-  posts: {
-    title: string
-    image_url: string
-  } | {
-    title: string
-    image_url: string
-  }[]
-  creator: {
-    first_name: string
-    last_name: string
-  } | {
-    first_name: string
-    last_name: string
-  }[]
-  user: {
-    first_name: string
-    last_name: string
-  } | {
-    first_name: string
-    last_name: string
-  }[]
 }
 
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
@@ -165,7 +136,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (error) {
     return <div className="flex justify-center items-center h-[calc(100vh-64px)]">
       <div className="text-center p-4 max-w-md">
-        <div className="text-red-500 text-5xl mb-4">⚠️</div>
+        <div className="text-red-500 text-5xl mb-4">&#x26A0;</div>
         <h2 className="text-xl font-semibold mb-2">Error</h2>
         <p className="text-gray-600 mb-4">{error}</p>
         <Link href="/dashboard" className="text-blue-500 hover:underline">
@@ -178,7 +149,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (!chat) {
     return <div className="flex justify-center items-center h-[calc(100vh-64px)]">
       <div className="text-center p-4 max-w-md">
-        <div className="text-yellow-500 text-5xl mb-4">🔍</div>
+        <div className="text-yellow-500 text-5xl mb-4">&#x1F50D;</div>
         <h2 className="text-xl font-semibold mb-2">Chat Not Found</h2>
         <p className="text-gray-600 mb-4">The chat you're looking for doesn't exist or has been deleted.</p>
         <Link href="/dashboard" className="text-blue-500 hover:underline">

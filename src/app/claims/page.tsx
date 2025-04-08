@@ -62,29 +62,6 @@ export default function ClaimsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifications, setShowNotifications] = useState(false)
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error checking authentication:', error)
-          return
-        }
-        
-        if (session && session.user) {
-          setCurrentUserId(session.user.id)
-          fetchClaimRequests(session.user.id)
-          fetchNotifications(session.user.id)
-        }
-      } catch (error) {
-        console.error('Unexpected error during authentication check:', error)
-      }
-    }
-    
-    checkAuth()
-  }, [])
-
   const fetchClaimRequests = async (userId: string) => {
     setLoading(true)
     
@@ -135,21 +112,45 @@ export default function ClaimsPage() {
           
           // Process claims data
           const processedClaims = await processClaimsData(claimsData || [])
-          setClaimRequests(processedClaims)
+          setClaimRequests(processedClaims as ClaimRequest[])
         } else {
           // Process questionnaire data
           const processedQuestionnaires = await processQuestionnaireData(questionnaireData || [])
-          setClaimRequests(processedQuestionnaires)
+          setClaimRequests(processedQuestionnaires as ClaimRequest[])
         }
       } catch (error) {
-        console.error('Error fetching claim requests:', error)
+        console.error('Error processing claim data:', error)
+      } finally {
+        setLoading(false)
       }
     } catch (error) {
-      console.error('Error fetching claim requests:', error)
-    } finally {
+      console.error('Error in fetchClaimRequests:', error)
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error checking authentication:', error)
+          return
+        }
+        
+        if (session && session.user) {
+          setCurrentUserId(session.user.id)
+          fetchClaimRequests(session.user.id)
+          fetchNotifications(session.user.id)
+        }
+      } catch (error) {
+        console.error('Unexpected error during authentication check:', error)
+      }
+    }
+    
+    checkAuth()
+  }, [])
 
   const fetchNotifications = async (userId: string) => {
     try {
@@ -270,48 +271,52 @@ export default function ClaimsPage() {
     }
   }
 
-  const processClaimsData = async (claims: any[]) => {
+  const processClaimsData = async (claims: Record<string, unknown>[]) => {
     // For each claim, fetch the associated post and claimer details
     const claimsWithDetails = await Promise.all(claims.map(async (claim) => {
       // Fetch post details
-      const { data: postData } = await supabase
+      const { data: postData, error: postError } = await supabase
         .from('posts')
         .select('*')
-        .eq('id', claim.post_id)
+        .eq('id', claim.post_id as string)
         .single()
+      
+      if (postError) {
+        console.error(`Error fetching post for claim ${claim.id}:`, postError)
+      }
       
       // Fetch claimer details
-      const { data: claimerData } = await supabase
+      const { data: claimerData, error: claimerError } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email')
-        .eq('id', claim.user_id)
+        .select('*')
+        .eq('id', claim.claimer_id as string)
         .single()
       
-      return {
-        ...claim,
-        post: postData || {},
-        claimer: claimerData || {}
+      if (claimerError) {
+        console.error(`Error fetching claimer for claim ${claim.id}:`, claimerError)
       }
+      
+      return { ...claim, post: postData || {}, claimer: claimerData || {} } as unknown as ClaimRequest;
     }))
     
     return claimsWithDetails
   }
 
-  const processQuestionnaireData = async (questionnaires: any[]) => {
+  const processQuestionnaireData = async (questionnaires: Record<string, unknown>[]) => {
     // For each questionnaire, fetch the associated post and claimer details
     const questionnairesWithDetails = await Promise.all(questionnaires.map(async (questionnaire) => {
       // Fetch post details
       const { data: postData } = await supabase
         .from('posts')
         .select('*')
-        .eq('id', questionnaire.post_id)
+        .eq('id', questionnaire.post_id as string)
         .single()
       
       // Fetch claimer details from users table instead of profiles
       const { data: claimerData } = await supabase
         .from('users')
         .select('id, first_name, last_name, email')
-        .eq('id', questionnaire.claimer_id)
+        .eq('id', questionnaire.claimer_id as string)
         .single()
       
       // Include questionnaire details
@@ -327,7 +332,7 @@ export default function ClaimsPage() {
         post: postData || {},
         claimer: claimerData || {},
         questionnaire_data: questionnaireData
-      }
+      } as unknown as ClaimRequest;
     }))
     
     return questionnairesWithDetails
@@ -340,6 +345,7 @@ export default function ClaimsPage() {
 
   const handleApproveClaim = async (claimId: string, postId: string, claimerId: string) => {
     try {
+      setLoading(true)
       // Get post title
       const { data: postData, error: postFetchError } = await supabase
         .from('posts')

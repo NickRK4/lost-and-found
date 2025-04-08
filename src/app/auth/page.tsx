@@ -1,15 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import Image from 'next/image'
 import Link from 'next/link'
 
 export default function AuthPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   const handleGoogleSignIn = async () => {
     try {
@@ -35,9 +32,9 @@ export default function AuthPage() {
       if (error) throw error
       
       console.log('Sign-in initiated successfully', data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error signing in with Google:', error);
-      setError(error.message || 'Error signing in with Google')
+      setError(error instanceof Error ? error.message : 'Error signing in with Google')
     } finally {
       setLoading(false)
     }
