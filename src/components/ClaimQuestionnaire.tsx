@@ -145,7 +145,7 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
         const timestamp = new Date().getTime()
         const filePath = `claim-pictures/${userId}_${post.id}_${timestamp}`
         
-        const { error: uploadError, data: uploadData } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('claim-pictures')
           .upload(filePath, pictureFile, {
             cacheControl: '3600',
