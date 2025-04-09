@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import toast from 'react-hot-toast'
 
 export default function PostForm() {
@@ -14,8 +14,10 @@ export default function PostForm() {
 
   // Get the current user ID on component mount
   useEffect(() => {
-    const currentUserId = localStorage.getItem('user_id')
-    setUserId(currentUserId)
+    if (isClient()) {
+      const currentUserId = localStorage.getItem('user_id')
+      setUserId(currentUserId)
+    }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -34,6 +36,12 @@ export default function PostForm() {
     }
 
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        toast.error('Unable to initialize Supabase client')
+        return
+      }
+    
       const { error } = await supabase.from('posts').insert({
         description: formData.get('description'),
         location: formData.get('location'),
@@ -71,6 +79,12 @@ export default function PostForm() {
       // Validate file type
       if (!file.type.startsWith('image/')) {
         toast.error('Only image files are allowed')
+        return
+      }
+
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        toast.error('Unable to initialize Supabase client')
         return
       }
 

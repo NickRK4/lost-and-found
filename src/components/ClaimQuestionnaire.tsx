@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -84,10 +84,17 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
     
     try {
       // Get the current user ID
-      const userId = currentUserId || localStorage.getItem('user_id')
+      const userId = currentUserId || (isClient() ? localStorage.getItem('user_id') : null)
       
       if (!userId) {
         toast.error('You must be logged in to claim an item')
+        setIsSubmitting(false)
+        return
+      }
+      
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        toast.error('Unable to initialize Supabase client')
         setIsSubmitting(false)
         return
       }
@@ -135,14 +142,19 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
       // Upload picture if provided
       let pictureUrl = null
       if (pictureFile) {
-        const fileName = `${userId}_${Date.now()}_${pictureFile.name}`
-        const { error: uploadError } = await supabase.storage
+        const timestamp = new Date().getTime()
+        const filePath = `claim-pictures/${userId}_${post.id}_${timestamp}`
+        
+        const { error: uploadError, data: uploadData } = await supabase.storage
           .from('claim-pictures')
-          .upload(fileName, pictureFile)
+          .upload(filePath, pictureFile, {
+            cacheControl: '3600',
+            upsert: false
+          })
         
         if (uploadError) {
           console.error('Error uploading picture:', uploadError)
-          toast.error('Failed to upload picture: ' + uploadError.message)
+          toast.error('Error uploading picture')
           setIsSubmitting(false)
           return
         }
@@ -150,7 +162,7 @@ export default function ClaimQuestionnaire({ post, onClose, onSubmitSuccess, cur
         // Get public URL
         const { data: urlData } = supabase.storage
           .from('claim-pictures')
-          .getPublicUrl(fileName)
+          .getPublicUrl(filePath)
         
         pictureUrl = urlData.publicUrl
       }

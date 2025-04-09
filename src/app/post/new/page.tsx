@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import dynamic from 'next/dynamic';
 
 // Dynamically import the MapComponent
@@ -64,6 +64,15 @@ export default function NewPost() {
     setLoading(true)
 
     try {
+      if (!isClient()) {
+        throw new Error('This operation can only be performed in a browser')
+      }
+      
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        throw new Error('Failed to initialize Supabase client')
+      }
+      
       const userId = localStorage.getItem('user_id')
       if (!userId) {
         router.push('/auth')

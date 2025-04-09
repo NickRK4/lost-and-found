@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
 import ClaimModal from '@/components/ClaimModal'
 import debounce from 'lodash.debounce'
@@ -45,56 +45,106 @@ export default function Dashboard() {
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const [userClaims, setUserClaims] = useState<{[postId: string]: string}>({})
   const [showQuestionnaire, setShowQuestionnaire] = useState(false)
-  const postCardRef = useRef<HTMLDivElement>(null)
   const [expandedImage, setExpandedImage] = useState<string | null>(null)
 
   const fetchPosts = useCallback(async () => {
+    if (!isClient()) return;
+    
     setLoading(true)
     setPosts([]) // Clear posts immediately to avoid showing stale data
     setFilteredPosts([]) // Clear filtered posts as well
     
     try {
-      // First, get all posts with basic user info
-      const { data, error } = await supabase
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client');
+        setLoading(false);
+        return;
+      }
+      
+      // First, get all posts
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          user_info:users!user_id (first_name, last_name)
-        `)
-        .order('created_at', { ascending: false })
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Fetch error:', error)
-        throw error
+      if (postsError) {
+        console.error('Error fetching posts:', postsError);
+        toast.error('Failed to load posts');
+        setLoading(false);
+        return;
       }
 
-      // Filter out posts where the user no longer exists
-      const validPosts = (data || []).filter(post => post.user_info !== null)
+      // Get all user IDs from posts to fetch user information
+      const userIds = [...new Set(postsData.map(post => post.user_id))].filter(Boolean);
+      
+      // Fetch user information
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+        
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+        toast.error('Failed to load user information');
+        setLoading(false);
+        return;
+      }
+      
+      // Create a map of user IDs to user information for quick lookup
+      const userMap: {[userId: string]: {first_name: string, last_name: string}} = {};
+      usersData.forEach(user => {
+        if (user && typeof user.id === 'string') {
+          userMap[user.id] = {
+            first_name: String(user.first_name || ''),
+            last_name: String(user.last_name || '')
+          };
+        }
+      });
+      
+      // Create properly typed Post objects
+      const typedPosts: Post[] = postsData.map(post => {
+        const userId = typeof post.user_id === 'string' ? post.user_id : '';
+        const userInfo = userMap[userId] || { first_name: '', last_name: '' };
+        
+        return {
+          id: String(post.id || ''),
+          title: String(post.title || ''),
+          description: String(post.description || ''),
+          location: String(post.location || ''),
+          image_url: String(post.image_url || ''),
+          created_at: String(post.created_at || ''),
+          user_id: String(post.user_id || ''),
+          first_name: userInfo.first_name,
+          last_name: userInfo.last_name,
+          status: (post.status as 'active' | 'claimed' | 'resolved') || 'active',
+          latitude: Number(post.latitude || 0),
+          longitude: Number(post.longitude || 0),
+          claimer_id: post.claimer_id ? String(post.claimer_id) : undefined,
+          claimer: post.claimer || null
+        };
+      });
       
       // Filter posts based on time range
-      const now = new Date()
-      const filteredPosts = validPosts.map(post => ({
-        ...post,
-        first_name: post.user_info?.first_name || '',
-        last_name: post.user_info?.last_name || ''
-      })).filter(post => {
-        const postDate = new Date(post.created_at)
-        const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24)
+      const now = new Date();
+      const filteredByTime = typedPosts.filter(post => {
+        const postDate = new Date(post.created_at);
+        const diffDays = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24);
         
         switch (timeRange) {
           case '1day':
-            return diffDays <= 1
+            return diffDays <= 1;
           case '7days':
-            return diffDays <= 7
+            return diffDays <= 7;
           case 'older':
-            return diffDays > 7
+            return diffDays > 7;
           default:
-            return true
+            return true;
         }
-      })
+      });
       
-      setPosts(filteredPosts)
-      setFilteredPosts(filteredPosts)
+      setPosts(filteredByTime);
+      setFilteredPosts(filteredByTime);
     } catch (error) {
       console.error('Error fetching posts:', error)
       toast.error('Failed to load posts. Please try again later.')
@@ -106,7 +156,16 @@ export default function Dashboard() {
   useEffect(() => {
     // Check if user is logged in using Supabase session
     const checkAuth = async () => {
+      if (!isClient()) return;
+      
       try {
+        const supabase = getSafeSupabaseClient();
+        if (!supabase) {
+          console.error('Unable to initialize Supabase client');
+          router.push('/auth');
+          return;
+        }
+        
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
@@ -122,197 +181,210 @@ export default function Dashboard() {
           
           // Fetch posts now that we know the user is authenticated
           fetchPosts()
-          fetchUserClaims(session.user.id)
+          
+          // Fetch claims by the user
+          if (session.user.id) {
+            fetchUserClaims(session.user.id)
+          }
         } else {
-          console.log('No active session found')
           router.push('/auth')
         }
       } catch (error) {
-        console.error('Unexpected error during auth check:', error)
+        console.error('Error in auth check:', error)
         router.push('/auth')
       }
     }
     
     checkAuth()
-  }, [timeRange, router, fetchPosts])
-
-  useEffect(() => {
-    if (postCardRef.current) {
-      // Nothing to do here, removed setting postCardWidth
-    }
-  }, [timeRange])
-
+  }, [fetchPosts, router])
+  
   const fetchUserClaims = async (userId: string) => {
     if (!userId) return
     
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client');
+        return;
+      }
+      
       // Fetch all claims by the user (not just pending ones)
-      let claimData;
       const { data: initialClaimData, error: claimError } = await supabase
-        .from('claim_questionnaire')
+        .from('claims')
         .select('post_id, status')
         .eq('claimer_id', userId)
       
-      claimData = initialClaimData;
-      
-      // If there's an error (likely table doesn't exist), try the claims table instead
       if (claimError) {
-        console.log('Trying claims table instead:', claimError.message)
-        
-        const { data: claimsData, error: claimsError } = await supabase
-          .from('claims')
-          .select('post_id, status')
-          .eq('user_id', userId)
-        
-        if (claimsError) {
-          console.log('Error fetching from claims table:', claimsError)
-          // If both tables fail, just set an empty object
-          setUserClaims({})
-          return
-        }
-        
-        claimData = claimsData
+        console.error('Error fetching user claims:', claimError)
+        return
       }
       
-      // Create a map of post_id to status
+      // Create a map of post IDs to claim status
       const claimsMap: {[postId: string]: string} = {}
-      if (claimData) {
-        claimData.forEach(claim => {
-          claimsMap[claim.post_id] = claim.status
-        })
-      }
+      initialClaimData.forEach((claim) => {
+        if (claim && typeof claim.post_id === 'string') {
+          claimsMap[claim.post_id] = String(claim.status || 'pending')
+        }
+      })
       
       setUserClaims(claimsMap)
     } catch (error) {
       console.error('Error fetching user claims:', error)
-      // In case of any other error, set an empty object
-      setUserClaims({})
     }
   }
-
+  
   const handleStartChat = async (postId: string, creatorId: string) => {
-    try {
-      const currentUserId = localStorage.getItem('user_id')
-      
-      if (!currentUserId) {
-        toast.error('You must be logged in to start a chat')
-        return
-      }
+    if (!currentUserId) {
+      toast.error('You must be logged in to chat with the owner')
+      return
+    }
+    
+    if (!postId || !creatorId) {
+      toast.error('Missing post or creator information')
+      return
+    }
 
+    try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client');
+        return;
+      }
+      
       // Check if chat already exists
       const { data: existingChat, error: findError } = await supabase
         .from('chats')
         .select('id')
         .eq('post_id', postId)
-        .eq('creator_id', creatorId)
-        .eq('claimer_id', currentUserId)
-        .single()
+        .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${creatorId}),and(user1_id.eq.${creatorId},user2_id.eq.${currentUserId})`)
+        .maybeSingle()
 
       if (findError) {
-        if (findError.code !== 'PGRST116') { // Not found error is expected
-          console.error('Error checking for existing chat:', findError)
-          toast.error('Error checking for existing chat: ' + findError.message)
+        console.error('Error finding chat:', findError)
+        toast.error('Error starting chat')
+        return
+      }
+      
+      let chatId
+      
+      if (existingChat) {
+        chatId = existingChat.id
+      } else {
+        // Create a new chat
+        const { data: newChat, error: createError } = await supabase
+          .from('chats')
+          .insert({
+            post_id: postId,
+            user1_id: currentUserId,
+            user2_id: creatorId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id')
+          .single()
+        
+        if (createError) {
+          console.error('Error creating chat:', createError)
+          toast.error('Failed to start chat')
           return
         }
-      } else if (existingChat) {
-        // Navigate directly to existing chat
-        console.log('Found existing chat:', existingChat)
-        router.push(`/chat/${existingChat.id}`)
-        return
+        
+        chatId = newChat.id
       }
-
-      // Create new chat
-      console.log('Creating new chat...')
-      const { data: newChat, error: createError } = await supabase
-        .from('chats')
-        .insert({
-          post_id: postId,
-          creator_id: creatorId,
-          claimer_id: currentUserId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select('id')
-        .single()
-
-      if (createError) {
-        console.error('Error creating chat:', createError)
-        toast.error('Failed to create chat: ' + createError.message)
-        return
-      }
-
-      // Navigate to new chat
-      if (newChat) {
-        console.log('Created new chat:', newChat)
-        router.push(`/chat/${newChat.id}`)
+      
+      // Navigate to the chat page
+      if (chatId) {
+        router.push(`/chat/${chatId}`)
       } else {
-        console.error('No chat data returned after creation')
-        toast.error('Failed to create chat. Please try again.')
+        toast.error('Failed to get chat ID')
       }
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Error starting chat:', error)
-      toast.error('Failed to start chat: ' + ((error as Error)?.message || 'Unknown error'))
+      toast.error('An error occurred while starting the chat')
     }
   }
-
+  
   const handleClaimItem = async () => {
-    if (!selectedPost || !currentUserId) {
-      console.error('No selected post or current user ID')
-      return
-    }
-
+    if (!selectedPost) return
+    
     try {
       console.log('Claiming item:', selectedPost.id)
       
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client');
+        return;
+      }
+      
       // Update only the post status
-      const { data, error: postError } = await supabase
+      const { error: postError } = await supabase
         .from('posts')
         .update({ 
-          status: 'claimed'
+          status: 'claimed',
+          claimer_id: currentUserId,
+          updated_at: new Date().toISOString()
         })
         .eq('id', selectedPost.id)
         .select()
-
+        .single()
+      
       if (postError) {
         console.error('Error updating post status:', postError)
-        toast.error('Failed to claim item: ' + postError.message)
+        toast.error('Failed to claim item. Please try again.')
         return
       }
-
-      console.log('Post claimed successfully', data)
-      toast.success('Item claimed successfully!')
       
-      // Start chat
-      await handleStartChat(selectedPost.id, selectedPost.user_id)
+      // Create a claim record
+      const { error: claimError } = await supabase
+        .from('claims')
+        .insert({
+          post_id: selectedPost.id,
+          claimer_id: currentUserId,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
       
-      // Refresh posts to show updated status
+      if (claimError) {
+        console.error('Error creating claim record:', claimError)
+        toast.error('Failed to record claim. Please try again.')
+        // Continue anyway since the post was updated
+      }
+      
+      toast.success('Item claimed successfully! You can now message the owner.')
+      
+      // Start a chat with the owner
+      handleStartChat(selectedPost.id, selectedPost.user_id)
+      
+      // Close the modal
+      setSelectedPost(null)
+      
+      // Refresh the posts
       fetchPosts()
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Error claiming item:', error)
-      toast.error('Failed to claim item: ' + ((error as Error)?.message || 'Unknown error'))
+      toast.error('An unexpected error occurred. Please try again.')
     }
   }
-
+  
   const handleOpenQuestionnaire = (post: Post) => {
     setSelectedPost(post)
     setShowQuestionnaire(true)
   }
-
+  
   const handleQuestionnaireSubmitSuccess = () => {
+    // Close the questionnaire
     setShowQuestionnaire(false)
     setSelectedPost(null)
     
-    // Update the user claims immediately after submission
-    if (selectedPost && currentUserId) {
-      setUserClaims(prev => ({
-        ...prev,
-        [selectedPost.id]: 'pending'
-      }))
-    }
+    toast.success('Your answers have been submitted. The owner will review your claim.')
     
-    toast.success('Claim request submitted, waiting for the owner to verify')
+    // Refetch posts and claims to get updated data
+    fetchPosts()
+    if (currentUserId) {
+      fetchUserClaims(currentUserId)
+    }
   }
-
+  
   // Create a debounced search function that can be properly canceled
   const debouncedFunction = useRef(debounce((query: string, postsArray: Post[]) => {
     if (!postsArray.length) return; // Don't run if posts haven't loaded yet

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -63,9 +63,18 @@ export default function ClaimsPage() {
   const [showNotifications, setShowNotifications] = useState(false)
 
   const fetchClaimRequests = useCallback(async (userId: string) => {
+    if (!isClient()) return;
+    
     setLoading(true)
     
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client');
+        setLoading(false);
+        return;
+      }
+      
       // First get all posts by the current user
       const { data: userPosts, error: postsError } = await supabase
         .from('posts')
@@ -132,7 +141,7 @@ export default function ClaimsPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+        const { data: { session }, error } = await getSafeSupabaseClient()?.auth.getSession()
         
         if (error) {
           console.error('Error checking authentication:', error)
@@ -159,8 +168,7 @@ export default function ClaimsPage() {
       yesterday.setDate(yesterday.getDate() - 1)
       
       // Get all chats where the user is a claimer
-      const { data: chats, error: chatsError } = await supabase
-        .from('chats')
+      const { data: chats, error: chatsError } = await getSafeSupabaseClient()?.from('chats')
         .select('id, post_id')
         .eq('claimer_id', userId)
       
@@ -175,8 +183,7 @@ export default function ClaimsPage() {
       const postIds = chats.map(chat => chat.post_id).filter(Boolean)
       
       // Get messages that might be notifications
-      const { data: messages, error: messagesError } = await supabase
-        .from('messages')
+      const { data: messages, error: messagesError } = await getSafeSupabaseClient()?.from('messages')
         .select('id, content, created_at, chat_id, user_id')
         .in('chat_id', chatIds)
         .gt('created_at', yesterday.toISOString())
@@ -188,10 +195,9 @@ export default function ClaimsPage() {
       }
       
       if (!messages || messages.length === 0) return
-      
+
       // Get post information
-      const { data: posts, error: postsError } = await supabase
-        .from('posts')
+      const { data: posts, error: postsError } = await getSafeSupabaseClient()?.from('posts')
         .select('id, title, user_id')
         .in('id', postIds)
       
@@ -200,15 +206,21 @@ export default function ClaimsPage() {
         return
       }
       
-      // Get post owner information
-      const ownerIds = posts?.map(post => post.user_id).filter(Boolean) || []
+      // Type-safe conversion of posts data
+      const typedPosts = (posts || []).map(post => ({
+        id: String(post.id || ''),
+        title: String(post.title || ''),
+        user_id: String(post.user_id || '')
+      }));
       
-      let owners: Owner[] = [];
+      // Collect unique owner IDs for fetching from users table
+      const ownerIds = [...new Set(typedPosts.map(post => post.user_id))].filter(Boolean)
+      
+      let owners: Owner[] = []
       if (ownerIds.length > 0) {
         console.log('Fetching users for owner IDs:', ownerIds);
         try {
-          const { data: ownersData, error: ownersError } = await supabase
-            .from('users')
+          const { data: ownersData, error: ownersError } = await getSafeSupabaseClient()?.from('users')
             .select('id, first_name, last_name')
             .in('id', ownerIds)
           
@@ -216,78 +228,91 @@ export default function ClaimsPage() {
             console.error('Error fetching post owners:', ownersError)
             // Continue with empty owners array
           } else {
-            owners = ownersData || []
+            owners = (ownersData || []).map(owner => ({
+              id: String(owner.id || ''),
+              first_name: String(owner.first_name || ''),
+              last_name: String(owner.last_name || '')
+            }));
             console.log('Successfully fetched owners:', owners.length);
           }
         } catch (e) {
-          console.error('Exception during owner fetch:', e);
-          // Continue with empty owners array
+          console.error('Exception fetching post owners:', e)
         }
-      } else {
-        console.log('No owner IDs to fetch');
       }
+      
+      // Helper function to get owner name from owners array
+      const getOwnerName = (userId: string, ownersList: Owner[]): string => {
+        const owner = ownersList.find(o => o.id === userId);
+        return owner ? `${owner.first_name} ${owner.last_name}`.trim() : 'Someone';
+      };
       
       // Create a map for easier lookup
       const postMap: Record<string, Post> = {}
-      posts?.forEach((post: {
-        id: string;
-        title: string;
-        user_id: string;
-        description?: string;
-        location?: string;
-        image_url?: string;
-        created_at?: string;
-        first_name?: string;
-        last_name?: string;
-        status?: string;
-      }) => { 
+      typedPosts.forEach((post) => {
         // Ensure the post object conforms to the Post interface
         postMap[post.id] = {
           id: post.id,
           title: post.title,
           user_id: post.user_id,
-          description: post.description || '',
-          location: post.location || '',
-          image_url: post.image_url || '',
-          created_at: post.created_at || '',
-          first_name: post.first_name || '',
-          last_name: post.last_name || '',
-          status: (post.status as 'active' | 'claimed' | 'resolved') || 'active'
+          description: '',
+          location: '',
+          image_url: '',
+          created_at: '',
+          first_name: '',
+          last_name: '',
+          status: 'active' as 'active' | 'claimed' | 'resolved'
         };
       })
       
-      const ownerMap: Record<string, Owner> = {}
-      owners.forEach(owner => { ownerMap[owner.id] = owner })
-      
+      // Create chat to post mapping
       const chatToPostMap: Record<string, string> = {}
-      chats.forEach(chat => { chatToPostMap[chat.id] = chat.post_id })
+      const typedChats = (chats || []).map(chat => ({
+        id: String(chat.id || ''),
+        post_id: String(chat.post_id || '')
+      }));
+      typedChats.forEach(chat => { chatToPostMap[chat.id] = chat.post_id });
+
+      // Process messages to find notifications
+      const newNotifications: Notification[] = []
       
-      // Filter and format notifications - no filtering based on recipient_id
-      const notificationMessages = messages.filter(msg => 
-        msg.content.includes('has accepted') || 
-        msg.content.includes('has rejected')
-      )
+      // Type-safe message processing
+      const typedMessages = (messages || []).map(msg => ({
+        id: String(msg.id || ''),
+        content: String(msg.content || ''),
+        created_at: String(msg.created_at || ''),
+        chat_id: String(msg.chat_id || ''),
+        user_id: String(msg.user_id || '')
+      }));
       
-      const formattedNotifications: Notification[] = notificationMessages.map(msg => {
+      typedMessages.forEach(msg => {
         const postId = chatToPostMap[msg.chat_id]
+        if (!postId) return
+        
         const post = postMap[postId]
-        const owner = post ? ownerMap[post.user_id] : null
+        if (!post) return
         
-        const isAccepted = msg.content.includes('has accepted')
-        const ownerName = owner ? `${owner.first_name} ${owner.last_name}`.trim() : 'Someone'
-        
-        return {
-          type: isAccepted ? 'accepted' : 'rejected',
-          postTitle: post?.title || 'Unknown item',
-          ownerName,
-          timestamp: new Date(msg.created_at).toLocaleString()
+        // Only look for system messages that indicate claim approval/rejection
+        if (msg.content.includes('approved your claim')) {
+          newNotifications.push({
+            type: 'accepted',
+            postTitle: post.title,
+            ownerName: getOwnerName(post.user_id, owners),
+            timestamp: new Date(msg.created_at).toLocaleString()
+          })
+        } else if (msg.content.includes('rejected your claim')) {
+          newNotifications.push({
+            type: 'rejected',
+            postTitle: post.title,
+            ownerName: getOwnerName(post.user_id, owners),
+            timestamp: new Date(msg.created_at).toLocaleString()
+          })
         }
       })
       
-      setNotifications(formattedNotifications)
+      setNotifications(newNotifications)
       
       // Show notifications if there are any
-      if (formattedNotifications.length > 0) {
+      if (newNotifications.length > 0) {
         setShowNotifications(true)
       }
       
@@ -300,8 +325,7 @@ export default function ClaimsPage() {
     // For each claim, fetch the associated post and claimer details
     const claimsWithDetails = await Promise.all(claims.map(async (claim) => {
       // Fetch post details
-      const { data: postData, error: postError } = await supabase
-        .from('posts')
+      const { data: postData, error: postError } = await getSafeSupabaseClient()?.from('posts')
         .select('*')
         .eq('id', claim.post_id as string)
         .single()
@@ -311,8 +335,7 @@ export default function ClaimsPage() {
       }
       
       // Fetch claimer details
-      const { data: claimerData, error: claimerError } = await supabase
-        .from('users')
+      const { data: claimerData, error: claimerError } = await getSafeSupabaseClient()?.from('users')
         .select('*')
         .eq('id', claim.claimer_id as string)
         .single()
@@ -331,15 +354,13 @@ export default function ClaimsPage() {
     // For each questionnaire, fetch the associated post and claimer details
     const questionnairesWithDetails = await Promise.all(questionnaires.map(async (questionnaire) => {
       // Fetch post details
-      const { data: postData } = await supabase
-        .from('posts')
+      const { data: postData } = await getSafeSupabaseClient()?.from('posts')
         .select('*')
         .eq('id', questionnaire.post_id as string)
         .single()
       
       // Fetch claimer details from users table instead of profiles
-      const { data: claimerData } = await supabase
-        .from('users')
+      const { data: claimerData } = await getSafeSupabaseClient()?.from('users')
         .select('id, first_name, last_name, email')
         .eq('id', questionnaire.claimer_id as string)
         .single()
@@ -372,8 +393,7 @@ export default function ClaimsPage() {
     try {
       setLoading(true)
       // Get post title
-      const { data: postData, error: postFetchError } = await supabase
-        .from('posts')
+      const { data: postData, error: postFetchError } = await getSafeSupabaseClient()?.from('posts')
         .select('title')
         .eq('id', postId)
         .single()
@@ -384,23 +404,9 @@ export default function ClaimsPage() {
         return
       }
       
-      // Get claimer name
-      const { data: claimerData, error: claimerError } = await supabase
-        .from('users')
-        .select('first_name')
-        .eq('id', claimerId)
-        .single()
-        
-      if (claimerError) {
-        console.error('Error getting claimer data:', claimerError)
-        toast.error('Failed to get claimer information')
-        return
-      }
-      
       // First update the claim status
       const updateTable = async (table: string) => {
-        const { error } = await supabase
-          .from(table)
+        const { error } = await getSafeSupabaseClient()?.from(table)
           .update({ status: 'approved' })
           .eq('id', claimId)
         
@@ -422,8 +428,7 @@ export default function ClaimsPage() {
       }
       
       // Then update the post status - include claimer_id since it exists in the posts table
-      const { error: postUpdateError } = await supabase
-        .from('posts')
+      const { error: postUpdateError } = await getSafeSupabaseClient()?.from('posts')
         .update({ 
           status: 'claimed',
           claimer_id: claimerId
@@ -440,8 +445,7 @@ export default function ClaimsPage() {
       let chatId;
       
       // First try to find an existing chat
-      const { data: existingChat, error: findChatError } = await supabase
-        .from('chats')
+      const { data: existingChat, error: findChatError } = await getSafeSupabaseClient()?.from('chats')
         .select('id')
         .eq('post_id', postId)
         .single()
@@ -450,8 +454,7 @@ export default function ClaimsPage() {
         console.log('No existing chat found, creating a new one')
         
         // Get the post owner's ID
-        const { data: postData, error: postOwnerError } = await supabase
-          .from('posts')
+        const { data: postData, error: postOwnerError } = await getSafeSupabaseClient()?.from('posts')
           .select('user_id')
           .eq('id', postId)
           .single()
@@ -463,8 +466,7 @@ export default function ClaimsPage() {
         }
         
         // Create a new chat
-        const { data: newChat, error: createChatError } = await supabase
-          .from('chats')
+        const { data: newChat, error: createChatError } = await getSafeSupabaseClient()?.from('chats')
           .insert({
             post_id: postId,
             creator_id: postData.user_id,
@@ -487,8 +489,7 @@ export default function ClaimsPage() {
       
       // Now we have a valid chatId, send the notification message
       // Get the post owner's ID first
-      const { data: postOwnerData, error: postOwnerError } = await supabase
-        .from('posts')
+      const { data: postOwnerData, error: postOwnerError } = await getSafeSupabaseClient()?.from('posts')
         .select('user_id')
         .eq('id', postId)
         .single()
@@ -500,10 +501,9 @@ export default function ClaimsPage() {
       }
       
       // Now get the post owner's name from the users table
-      const { data: ownerUserData, error: ownerUserError } = await supabase
-        .from('users')
+      const { data: ownerUserData, error: ownerUserError } = await getSafeSupabaseClient()?.from('users')
         .select('first_name, last_name')
-        .eq('id', postOwnerData.user_id)
+        .eq('id', postOwnerData?.user_id || '')
         .single()
         
       if (ownerUserError) {
@@ -518,14 +518,17 @@ export default function ClaimsPage() {
         ownerName = `${ownerUserData.first_name} ${ownerUserData.last_name || ''}`.trim()
       }
       
+      // Safely create HTML content
+      const content = `The owner ${ownerName} has approved your claim for "${postData.title || 'Unknown item'}". Please contact them to arrange pickup.`;
+      
       // Send a single notification message in the chat that both users can see
-      const { error: chatMessageError } = await supabase
-        .from('messages')
+      const { error: chatMessageError } = await getSafeSupabaseClient()?.from('messages')
         .insert({
           chat_id: chatId,
-          user_id: postOwnerData.user_id,
-          content: `${ownerName} has accepted ${claimerData.first_name}'s claim for "${postData.title}". Start chatting!`
-        })
+          user_id: postOwnerData?.user_id || '',
+          content: content,
+          is_system_message: true
+        } as Record<string, unknown>)
         
       if (chatMessageError) {
         console.error('Error sending chat notification message:', chatMessageError)
@@ -549,8 +552,7 @@ export default function ClaimsPage() {
   const handleRejectClaim = async (claimId: string, postId: string, claimerId: string) => {
     try {
       // Get post title
-      const { data: postData, error: postFetchError } = await supabase
-        .from('posts')
+      const { data: postData, error: postFetchError } = await getSafeSupabaseClient()?.from('posts')
         .select('title')
         .eq('id', postId)
         .single()
@@ -561,23 +563,9 @@ export default function ClaimsPage() {
         return
       }
       
-      // Get claimer name
-      const { data: claimerData, error: claimerError } = await supabase
-        .from('users')
-        .select('first_name')
-        .eq('id', claimerId)
-        .single()
-        
-      if (claimerError) {
-        console.error('Error getting claimer data:', claimerError)
-        toast.error('Failed to get claimer information')
-        return
-      }
-      
       // First update the claim status
       const updateTable = async (table: string) => {
-        const { error } = await supabase
-          .from(table)
+        const { error } = await getSafeSupabaseClient()?.from(table)
           .update({ status: 'rejected' })
           .eq('id', claimId)
         
@@ -599,8 +587,7 @@ export default function ClaimsPage() {
       }
       
       // Then update the post status for rejected claims
-      const { error: postUpdateError } = await supabase
-        .from('posts')
+      const { error: postUpdateError } = await getSafeSupabaseClient()?.from('posts')
         .update({ 
           status: 'active', // Reset to active since the claim was rejected
           claimer_id: null  // Clear the claimer_id
@@ -617,8 +604,7 @@ export default function ClaimsPage() {
       let chatId;
       
       // First try to find an existing chat
-      const { data: existingChat, error: findChatError } = await supabase
-        .from('chats')
+      const { data: existingChat, error: findChatError } = await getSafeSupabaseClient()?.from('chats')
         .select('id')
         .eq('post_id', postId)
         .single()
@@ -627,8 +613,7 @@ export default function ClaimsPage() {
         console.log('No existing chat found, creating a new one')
         
         // Get the post owner's ID
-        const { data: postData, error: postOwnerError } = await supabase
-          .from('posts')
+        const { data: postData, error: postOwnerError } = await getSafeSupabaseClient()?.from('posts')
           .select('user_id')
           .eq('id', postId)
           .single()
@@ -640,8 +625,7 @@ export default function ClaimsPage() {
         }
         
         // Create a new chat
-        const { data: newChat, error: createChatError } = await supabase
-          .from('chats')
+        const { data: newChat, error: createChatError } = await getSafeSupabaseClient()?.from('chats')
           .insert({
             post_id: postId,
             creator_id: postData.user_id,
@@ -664,8 +648,7 @@ export default function ClaimsPage() {
       
       // Now we have a valid chatId, send the notification message
       // Get the post owner's ID first
-      const { data: postOwnerData, error: postOwnerError } = await supabase
-        .from('posts')
+      const { data: postOwnerData, error: postOwnerError } = await getSafeSupabaseClient()?.from('posts')
         .select('user_id')
         .eq('id', postId)
         .single()
@@ -677,10 +660,9 @@ export default function ClaimsPage() {
       }
       
       // Now get the post owner's name from the users table
-      const { data: ownerUserData, error: ownerUserError } = await supabase
-        .from('users')
+      const { data: ownerUserData, error: ownerUserError } = await getSafeSupabaseClient()?.from('users')
         .select('first_name, last_name')
-        .eq('id', postOwnerData.user_id)
+        .eq('id', postOwnerData?.user_id || '')
         .single()
         
       if (ownerUserError) {
@@ -695,14 +677,17 @@ export default function ClaimsPage() {
         ownerName = `${ownerUserData.first_name} ${ownerUserData.last_name || ''}`.trim()
       }
       
+      // Safely create HTML content
+      const content = `The owner ${ownerName} has rejected your claim for "${postData.title || 'Unknown item'}". They may have selected another claimer or determined it's not a match.`;
+      
       // Send a single notification message in the chat that both users can see
-      const { error: chatMessageError } = await supabase
-        .from('messages')
+      const { error: chatMessageError } = await getSafeSupabaseClient()?.from('messages')
         .insert({
           chat_id: chatId,
-          user_id: postOwnerData.user_id,
-          content: `${ownerName} has rejected ${claimerData.first_name}'s claim for "${postData.title}".`
-        })
+          user_id: postOwnerData?.user_id || '',
+          content: content,
+          is_system_message: true
+        } as Record<string, unknown>)
         
       if (chatMessageError) {
         console.error('Error sending chat notification message:', chatMessageError)

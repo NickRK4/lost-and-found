@@ -1,123 +1,163 @@
 'use client'
 
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
+import { Bell } from 'lucide-react'
 import ChatList from './ChatList'
-import { supabase } from '@/lib/supabase'
 
 export default function Navbar() {
   const router = useRouter()
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [, setUser] = useState<{id: string; email?: string; first_name?: string; last_name?: string} | null>(null)
+  const [notifications, setNotifications] = useState(0)
   const [showChatMenu, setShowChatMenu] = useState(false)
-  const [notifications, setNotifications] = useState<number>(0)
-  const [notificationsViewed, setNotificationsViewed] = useState(false)
-
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  
   useEffect(() => {
-    // Get current user ID from localStorage
-    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null
+    // Only check for userId on client side
+    if (!isClient()) return
     
-    if (userId) {
-      fetchNotifications(userId)
-      
-      // Set up subscription for real-time updates
-      const subscription = supabase
-        .channel('claim_notifications')
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'claim_questionnaire'
-        }, () => {
-          fetchNotifications(userId)
-          // Reset the viewed status when new notifications arrive
-          setNotificationsViewed(false)
-        })
-        .subscribe()
-      
-      return () => {
-        subscription.unsubscribe()
+    const userId = localStorage.getItem('user_id')
+    if (!userId) {
+      router.push('/auth')
+      return
+    }
+    
+    // Fetch user details
+    const fetchUserDetails = async () => {
+      try {
+        const supabase = getSafeSupabaseClient()
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, email, first_name, last_name')
+          .eq('id', userId)
+          .single()
+        
+        if (error) throw error
+        
+        if (data) {
+          setUser({
+            id: String(data.id),
+            email: data.email ? String(data.email) : undefined,
+            first_name: data.first_name ? String(data.first_name) : undefined,
+            last_name: data.last_name ? String(data.last_name) : undefined
+          })
+        } else {
+          // User data not found, redirect to auth
+          localStorage.removeItem('user_id')
+          router.push('/auth')
+        }
+      } catch (error) {
+        console.error('Error fetching user details:', error)
       }
     }
-  }, [])
+    
+    fetchUserDetails()
+  }, [router])
 
-  const fetchNotifications = async (userId: string) => {
+  // Fetch notifications count (pending claims)
+  useEffect(() => {
+    if (!isClient()) return
+    
+    const userId = localStorage.getItem('user_id')
     if (!userId) return
     
-    try {
-      // First get all posts by the current user
-      const { data: userPosts, error: postsError } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', userId)
-      
-      if (postsError) {
-        console.error('Error fetching user posts:', postsError)
-        return
-      }
-      
-      if (!userPosts || userPosts.length === 0) {
-        setNotifications(0)
-        return
-      }
-      
-      const postIds = userPosts.map(post => post.id)
-      
-      // Try to get count of pending claims from claim_questionnaire table
-      let count = 0
-      
+    const fetchNotificationsCount = async () => {
       try {
-        // First try the claim_questionnaire table
-        const { error, count: questionnaireCount } = await supabase
-          .from('claim_questionnaire')
-          .select('id', { count: 'exact' })
-          .in('post_id', postIds)
-          .eq('status', 'pending')
+        const supabase = getSafeSupabaseClient()
+        // First get all posts by the current user
+        const { data: userPosts, error: postsError } = await supabase
+          .from('posts')
+          .select('id')
+          .eq('user_id', userId)
         
-        if (error) {
-          console.log('Trying claims table instead:', error.message)
-          
-          // If there's an error, try the claims table
-          const { error: claimsError, count: claimsCount } = await supabase
-            .from('claims')
+        if (postsError) {
+          console.error('Error fetching user posts:', postsError)
+          return
+        }
+        
+        if (!userPosts || userPosts.length === 0) {
+          setNotifications(0)
+          return
+        }
+        
+        const postIds = userPosts.map(post => post.id)
+        
+        // Try to get count of pending claims from claim_questionnaire table
+        let count = 0
+        
+        try {
+          // First try the claim_questionnaire table
+          const supabase = getSafeSupabaseClient()
+          const { error, count: questionnaireCount } = await supabase
+            .from('claim_questionnaire')
             .select('id', { count: 'exact' })
             .in('post_id', postIds)
             .eq('status', 'pending')
           
-          if (!claimsError) {
+          if (error) {
+            console.log('Trying claims table instead:', error.message)
+            
+            // If there's an error, try the claims table
+            const { error: claimsError, count: claimsCount } = await supabase
+              .from('claims')
+              .select('id', { count: 'exact' })
+              .in('post_id', postIds)
+              .eq('status', 'pending')
+            
+            if (claimsError) {
+              console.error('Error counting claims:', claimsError)
+              return
+            }
+            
             count = claimsCount || 0
+          } else {
+            count = questionnaireCount || 0
           }
-        } else {
-          count = questionnaireCount || 0
+          
+          setNotifications(count)
+        } catch (error) {
+          console.error('Error fetching notifications:', error)
         }
-      } catch (countError) {
-        console.error('Error counting notifications:', countError)
+      } catch (error) {
+        console.error('Error in notification system:', error)
       }
-      
-      setNotifications(count)
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
-      setNotifications(0)
+    }
+    
+    fetchNotificationsCount()
+    
+    // Set up interval to refresh every 30 seconds
+    const interval = setInterval(fetchNotificationsCount, 30000)
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleLogout = async () => {
+    if (isClient()) {
+      localStorage.removeItem('user_id')
+      router.push('/auth')
     }
   }
-
+  
+  // Handle clicking outside the dropdown to close it
   const handleClickOutside = useCallback((e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (showProfileMenu && target && !target.closest('.profile-menu')) {
-      setShowProfileMenu(false)
+    if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      setDropdownOpen(false)
     }
     
     // Close chat menu when clicking outside
+    const target = e.target as HTMLElement;
     if (showChatMenu && target && !target.closest('.chat-sidebar') && !target.closest('.chat-menu-button')) {
       setShowChatMenu(false)
     }
-  }, [showProfileMenu, showChatMenu]);
+  }, [showChatMenu])
 
   useEffect(() => {
-    document.addEventListener('click', handleClickOutside)
-    return () => {
-      document.removeEventListener('click', handleClickOutside)
-    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [handleClickOutside])
 
   return (
@@ -181,33 +221,19 @@ export default function Navbar() {
           <div className="relative mx-4 flex items-center h-10">
             <button
               onClick={() => {
-                setNotificationsViewed(true);
                 router.push('/claims');
               }}
               className="text-gray-500 hover:text-gray-700 relative flex items-center justify-center h-full"
               aria-label="View claim requests"
             >
-              <svg 
+              <Bell 
                 className={`h-6 w-6 ${notifications > 0 ? 'text-[#57068B]' : ''}`} 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" 
-                />
-              </svg>
+              />
               {notifications > 0 && (
                 <>
                   <span className="absolute -top-1 -right-1 bg-[#57068B] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     {notifications}
                   </span>
-                  {!notificationsViewed && (
-                    <span className="absolute inset-0 animate-ping rounded-full bg-[#57068B] opacity-75"></span>
-                  )}
                 </>
               )}
             </button>
@@ -217,7 +243,7 @@ export default function Navbar() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                setShowProfileMenu(!showProfileMenu)
+                setDropdownOpen(!dropdownOpen)
               }}
               className="text-gray-500 hover:text-gray-700 flex items-center justify-center h-full"
             >
@@ -225,27 +251,21 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </button>
-            {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50 profile-menu" onClick={(e) => e.stopPropagation()}>
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50" ref={dropdownRef}>
                 <Link
                   href="/profile"
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setShowProfileMenu(false)
+                    setDropdownOpen(false)
                     router.push('/profile')
                   }}
                 >
                   Edit Profile
                 </Link>
                 <button
-                  onClick={async (e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    // await supabase.auth.signOut()
-                    // localStorage.removeItem('user_id')
-                    router.push('/auth')
-                  }}
+                  onClick={handleLogout}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Sign Out

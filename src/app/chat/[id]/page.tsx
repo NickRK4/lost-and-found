@@ -1,9 +1,21 @@
 'use client'
 
 import { useEffect, useState, use } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import ChatMessages from '@/components/ChatMessages'
 import Link from 'next/link'
+
+interface PostData {
+  title?: string;
+  image_url?: string;
+}
+
+interface UserData {
+  id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+}
 
 interface ChatData {
   id: string
@@ -29,6 +41,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => {
     const fetchChat = async () => {
+      if (!isClient()) return;
+      
       try {
         if (!id) {
           setError('No chat ID provided')
@@ -37,6 +51,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         }
 
         console.log('Fetching chat with ID:', id)
+        
+        // Safely get the Supabase client
+        const supabase = getSafeSupabaseClient();
+        if (!supabase) {
+          setError('Unable to initialize Supabase client');
+          setLoading(false);
+          return;
+        }
         
         // First fetch the chat data
         const { data: chatData, error: chatError } = await supabase
@@ -59,13 +81,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           return
         }
 
+        // Create safely typed variables
+        const chatId = String(chatData.id || '');
+        const postId = String(chatData.post_id || '');
+        const creatorId = String(chatData.creator_id || '');
+        const claimerId = String(chatData.claimer_id || '');
+
         console.log('Chat data received:', chatData)
 
         // Fetch post data
         const { data: postData, error: postError } = await supabase
           .from('posts')
           .select('title, image_url')
-          .eq('id', chatData.post_id)
+          .eq('id', postId)
           .single()
 
         if (postError) {
@@ -76,7 +104,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         const { data: creatorData, error: creatorError } = await supabase
           .from('users')
           .select('id, first_name, last_name, email')
-          .eq('id', chatData.creator_id)
+          .eq('id', creatorId)
           .single()
 
         if (creatorError) {
@@ -88,7 +116,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         const { data: claimerData, error: claimerError } = await supabase
           .from('users')
           .select('id, first_name, last_name, email')
-          .eq('id', chatData.claimer_id)
+          .eq('id', claimerId)
           .single()
 
         if (claimerError) {
@@ -96,19 +124,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           // Continue with default values
         }
 
+        const postDataTyped = (postData || {}) as PostData;
+        const creatorDataTyped = (creatorData || {}) as UserData;
+        const claimerDataTyped = (claimerData || {}) as UserData;
+
         const formattedChat: ChatData = {
-          id: chatData.id,
+          id: chatId,
           post: {
-            title: postData?.title || 'Unknown Post',
-            image_url: postData?.image_url || ''
+            title: postDataTyped.title || 'Unknown Post',
+            image_url: postDataTyped.image_url || ''
           },
           creator: {
-            first_name: creatorData?.first_name || 'Unknown',
-            last_name: creatorData?.last_name || ''
+            first_name: creatorDataTyped.first_name || 'Unknown',
+            last_name: creatorDataTyped.last_name || ''
           },
           user: {
-            first_name: claimerData?.first_name || 'Unknown',
-            last_name: claimerData?.last_name || ''
+            first_name: claimerDataTyped.first_name || 'Unknown',
+            last_name: claimerDataTyped.last_name || ''
           }
         }
 

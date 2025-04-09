@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -29,48 +29,50 @@ interface Chat {
   }
 }
 
+// Redefined to handle any potential shape of data from Supabase
+interface SupabasePost {
+  id?: string;
+  title?: string;
+  image_url?: string;
+  description?: string;
+  created_at?: string;
+}
+
+interface SupabaseUser {
+  first_name?: string;
+  last_name?: string;
+}
+
 interface SupabaseChat {
-  id: string
-  post_id: string
-  creator_id: string
-  claimer_id: string
-  posts: {
-    id: string
-    title: string
-    image_url: string
-    description: string
-    created_at: string
-  } | {
-    id: string
-    title: string
-    image_url: string
-    description: string
-    created_at: string
-  }[]
-  creator: {
-    first_name?: string
-    last_name?: string
-  } | {
-    first_name?: string
-    last_name?: string
-  }[]
-  claimer: {
-    first_name?: string
-    last_name?: string
-  } | {
-    first_name?: string
-    last_name?: string
-  }[]
+  id: string;
+  post_id: string;
+  creator_id: string;
+  claimer_id: string;
+  posts?: SupabasePost | SupabasePost[] | Record<string, unknown>;
+  creator?: SupabaseUser | SupabaseUser[] | Record<string, unknown>;
+  claimer?: SupabaseUser | SupabaseUser[] | Record<string, unknown>;
 }
 
 export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const fetchChats = async () => {
+    if (!isClient()) return;
+    
     try {
       const userId = localStorage.getItem('user_id')
       if (!userId) return
+      
+      setCurrentUserId(userId)
+
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        console.error('Unable to initialize Supabase client')
+        setLoading(false)
+        return
+      }
 
       // Get all chats with related data in a single query
       const { data, error } = await supabase
@@ -111,61 +113,131 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
       }
 
       // Get latest messages for each chat in parallel
-      const chatsWithMessages = await Promise.all((data as SupabaseChat[]).map(async (chat) => {
-        const { data: messagesData, error: messagesError } = await supabase
-          .from('messages')
-          .select('content, created_at')
-          .eq('chat_id', chat.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
+      const chatsWithMessages = await Promise.all(
+        (data as unknown as SupabaseChat[]).map(async (chat) => {
+          // Make sure chat has valid id
+          const chatId = typeof chat.id === 'string' ? chat.id : String(chat.id);
+          
+          const { data: messagesData, error: messagesError } = await supabase
+            .from('messages')
+            .select('content, created_at')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: false })
+            .limit(1)
 
-        if (messagesError) {
-          console.error('Error fetching messages:', messagesError)
-        }
-
-        // Extract the post data (it comes as an array with one object or as a single object)
-        const postData = Array.isArray(chat.posts) && chat.posts.length > 0
-          ? chat.posts[0]
-          : (chat.posts as { id: string; title: string; image_url: string; description: string; created_at: string }) || 
-            { id: '', title: 'Unknown Post', image_url: '', description: '', created_at: new Date().toISOString() }
-        
-        // Extract the user data (it comes as an array with one object or as a single object)
-        const creatorData = Array.isArray(chat.creator) && chat.creator.length > 0
-          ? chat.creator[0]
-          : (chat.creator as { first_name?: string; last_name?: string }) || 
-            { first_name: 'Unknown', last_name: '' }
-        
-        const claimerData = Array.isArray(chat.claimer) && chat.claimer.length > 0
-          ? chat.claimer[0]
-          : (chat.claimer as { first_name?: string; last_name?: string }) || 
-            { first_name: 'Unknown', last_name: '' }
-
-        return {
-          id: chat.id,
-          post_id: chat.post_id,
-          creator_id: chat.creator_id,
-          claimer_id: chat.claimer_id,
-          last_message: messagesData?.[0]?.content,
-          last_message_time: messagesData?.[0]?.created_at,
-          post: {
-            id: postData.id || '',
-            title: postData.title || 'Unknown Post',
-            image_url: postData.image_url || '',
-            description: postData.description || '',
-            created_at: postData.created_at || new Date().toISOString()
-          },
-          creator: {
-            first_name: creatorData.first_name || 'Unknown',
-            last_name: creatorData.last_name || ''
-          },
-          claimer: {
-            first_name: claimerData.first_name || 'Unknown',
-            last_name: claimerData.last_name || ''
+          if (messagesError) {
+            console.error('Error fetching messages:', messagesError)
           }
-        }
-      }))
 
-      setChats(chatsWithMessages)
+          // Extract the post data (it comes as an array with one object or as a single object)
+          let postData: SupabasePost = { 
+            id: '', 
+            title: 'Unknown Post', 
+            image_url: '', 
+            description: '', 
+            created_at: new Date().toISOString() 
+          };
+          
+          if (chat.posts) {
+            if (Array.isArray(chat.posts) && chat.posts.length > 0) {
+              const firstPost = chat.posts[0];
+              if (firstPost && typeof firstPost === 'object') {
+                postData = {
+                  id: typeof firstPost.id === 'string' ? firstPost.id : '',
+                  title: typeof firstPost.title === 'string' ? firstPost.title : 'Unknown Post',
+                  image_url: typeof firstPost.image_url === 'string' ? firstPost.image_url : '',
+                  description: typeof firstPost.description === 'string' ? firstPost.description : '',
+                  created_at: typeof firstPost.created_at === 'string' ? firstPost.created_at : new Date().toISOString()
+                };
+              }
+            } else if (chat.posts && typeof chat.posts === 'object') {
+              const post = chat.posts as SupabasePost;
+              postData = {
+                id: typeof post.id === 'string' ? post.id : '',
+                title: typeof post.title === 'string' ? post.title : 'Unknown Post',
+                image_url: typeof post.image_url === 'string' ? post.image_url : '',
+                description: typeof post.description === 'string' ? post.description : '',
+                created_at: typeof post.created_at === 'string' ? post.created_at : new Date().toISOString()
+              };
+            }
+          }
+          
+          // Extract the user data for creator
+          let creatorData: SupabaseUser = { first_name: 'Unknown', last_name: '' };
+          
+          if (chat.creator) {
+            if (Array.isArray(chat.creator) && chat.creator.length > 0) {
+              const firstCreator = chat.creator[0];
+              if (firstCreator && typeof firstCreator === 'object') {
+                creatorData = {
+                  first_name: typeof firstCreator.first_name === 'string' ? firstCreator.first_name : 'Unknown',
+                  last_name: typeof firstCreator.last_name === 'string' ? firstCreator.last_name : ''
+                };
+              }
+            } else if (chat.creator && typeof chat.creator === 'object') {
+              const creator = chat.creator as SupabaseUser;
+              creatorData = {
+                first_name: typeof creator.first_name === 'string' ? creator.first_name : 'Unknown',
+                last_name: typeof creator.last_name === 'string' ? creator.last_name : ''
+              };
+            }
+          }
+          
+          // Extract the user data for claimer
+          let claimerData: SupabaseUser = { first_name: 'Unknown', last_name: '' };
+          
+          if (chat.claimer) {
+            if (Array.isArray(chat.claimer) && chat.claimer.length > 0) {
+              const firstClaimer = chat.claimer[0];
+              if (firstClaimer && typeof firstClaimer === 'object') {
+                claimerData = {
+                  first_name: typeof firstClaimer.first_name === 'string' ? firstClaimer.first_name : 'Unknown',
+                  last_name: typeof firstClaimer.last_name === 'string' ? firstClaimer.last_name : ''
+                };
+              }
+            } else if (chat.claimer && typeof chat.claimer === 'object') {
+              const claimer = chat.claimer as SupabaseUser;
+              claimerData = {
+                first_name: typeof claimer.first_name === 'string' ? claimer.first_name : 'Unknown',
+                last_name: typeof claimer.last_name === 'string' ? claimer.last_name : ''
+              };
+            }
+          }
+          
+          // Create a properly typed result
+          const result: Chat = {
+            id: chatId,
+            post_id: typeof chat.post_id === 'string' ? chat.post_id : String(chat.post_id || ''),
+            creator_id: typeof chat.creator_id === 'string' ? chat.creator_id : String(chat.creator_id || ''),
+            claimer_id: typeof chat.claimer_id === 'string' ? chat.claimer_id : String(chat.claimer_id || ''),
+            last_message: messagesData && messagesData[0] && typeof messagesData[0].content === 'string' 
+              ? messagesData[0].content 
+              : undefined,
+            last_message_time: messagesData && messagesData[0] && typeof messagesData[0].created_at === 'string' 
+              ? messagesData[0].created_at 
+              : undefined,
+            post: {
+              id: postData.id || '',
+              title: postData.title || 'Unknown Post',
+              image_url: postData.image_url || '',
+              description: postData.description || '',
+              created_at: postData.created_at || new Date().toISOString()
+            },
+            creator: {
+              first_name: creatorData.first_name || 'Unknown',
+              last_name: creatorData.last_name || ''
+            },
+            claimer: {
+              first_name: claimerData.first_name || 'Unknown',
+              last_name: claimerData.last_name || ''
+            }
+          };
+          
+          return result;
+        })
+      );
+
+      setChats(chatsWithMessages);
     } catch (error) {
       console.error('Error in fetchChats:', error)
     } finally {
@@ -184,8 +256,6 @@ export default function ChatSidebar({ onClose }: { onClose?: () => void }) {
       </div>
     )
   }
-
-  const currentUserId = localStorage.getItem('user_id')
 
   return (
     <div className="h-full">

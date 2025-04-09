@@ -2,7 +2,7 @@
 
 import { Post } from '@/types/database'
 import PostCard from './PostCard'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient } from '@/lib/supabaseHelpers'
 import { subDays } from 'date-fns'
 import { useEffect, useState } from 'react'
 
@@ -27,6 +27,13 @@ export default function PostList({ timeFrame }: PostListProps) {
         }
         
         const startDate = subDays(now, daysMap[timeFrame])
+        
+        const supabase = getSafeSupabaseClient();
+        if (!supabase) {
+          setError('Unable to initialize Supabase client')
+          setLoading(false)
+          return
+        }
 
         const { data, error } = await supabase
           .from('posts')
@@ -36,7 +43,21 @@ export default function PostList({ timeFrame }: PostListProps) {
 
         if (error) throw error
 
-        setPosts(data || [])
+        // Safely convert the returned data to Post[] type
+        if (data) {
+          const typedPosts = data.map(item => ({
+            id: String(item.id || ''),
+            user_id: String(item.user_id || ''),
+            image_url: String(item.image_url || ''),
+            description: String(item.description || ''),
+            location: String(item.location || ''),
+            created_at: String(item.created_at || ''),
+            status: (item.status as Post['status']) || 'active'
+          }));
+          setPosts(typedPosts);
+        } else {
+          setPosts([]);
+        }
       } catch (err) {
         console.error('Error fetching posts:', err)
         setError('Failed to load posts')

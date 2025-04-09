@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Link from 'next/link'
 
 export default function AuthPage() {
@@ -9,13 +9,19 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
 
   const handleGoogleSignIn = async () => {
+    if (!isClient()) return;
+    
     try {
       setLoading(true)
+      
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        throw new Error('Unable to initialize Supabase client');
+      }
+      
       // Get the current origin with a fallback for local development
-      const redirectUrl = typeof window !== 'undefined' 
-        ? `${window.location.origin}/auth/callback` 
-        : 'http://localhost:3000/auth/callback';
-        
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      
       console.log('Redirecting to:', redirectUrl);
       
       const { error, data } = await supabase.auth.signInWithOAuth({

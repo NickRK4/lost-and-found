@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import Image from 'next/image'
 
 export default function EditProfile() {
@@ -15,6 +15,8 @@ export default function EditProfile() {
 
   useEffect(() => {
     const fetchUserProfile = async () => {
+      if (!isClient()) return;
+      
       setLoading(true)
       
       const userId = localStorage.getItem('user_id')
@@ -24,6 +26,13 @@ export default function EditProfile() {
       }
 
       try {
+        const supabase = getSafeSupabaseClient();
+        if (!supabase) {
+          console.error('Unable to initialize Supabase client');
+          setLoading(false);
+          return;
+        }
+        
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -33,8 +42,8 @@ export default function EditProfile() {
         if (error) throw error
 
         if (data) {
-          setUsername(data.username)
-          setPreviewUrl(data.avatar_url)
+          setUsername(data.username ? String(data.username) : '')
+          setPreviewUrl(data.avatar_url ? String(data.avatar_url) : '')
         }
       } catch (error) {
         console.error('Error fetching user data:', error)
@@ -56,9 +65,16 @@ export default function EditProfile() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isClient()) return;
+    
     setLoading(true)
 
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        throw new Error('Unable to initialize Supabase client');
+      }
+      
       const userId = localStorage.getItem('user_id')
       if (!userId) throw new Error('User not authenticated')
 
@@ -93,6 +109,8 @@ export default function EditProfile() {
         .eq('id', userId)
 
       if (error) throw error
+      
+      router.push('/profile');
 
     } catch (error) {
       console.error('Error updating user data:', error)

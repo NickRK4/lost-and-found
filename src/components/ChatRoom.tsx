@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import { Send, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
@@ -33,10 +33,15 @@ export default function ChatRoom({ post }: { post: Post }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const initializeChat = useCallback(async () => {
+    if (!isClient()) return;
+
     // Check if chat exists or create new one
     let chat = post.chats?.[0]
     
     if (!chat) {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) return;
+
       const { data: newChat, error } = await supabase
         .from('chats')
         .insert({
@@ -52,13 +57,18 @@ export default function ChatRoom({ post }: { post: Post }) {
         return
       }
       
-      chat = newChat
+      if (newChat) {
+        chat = { id: String(newChat.id) }
+      }
     }
 
-    if (chat) {
-      setChatId(chat.id)
+    if (chat && chat.id) {
+      setChatId(chat.id.toString())
 
       // Fetch existing messages
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) return;
+
       const { data: existingMessages } = await supabase
         .from('messages')
         .select('*')
@@ -66,7 +76,15 @@ export default function ChatRoom({ post }: { post: Post }) {
         .order('created_at', { ascending: true })
 
       if (existingMessages) {
-        setMessages(existingMessages)
+        // Properly type the messages
+        const typedMessages = existingMessages.map(msg => ({
+          id: String(msg.id || ''),
+          content: String(msg.content || ''),
+          sender_id: String(msg.sender_id || ''),
+          created_at: String(msg.created_at || new Date().toISOString())
+        }));
+        
+        setMessages(typedMessages)
       }
     }
   }, [post.chats, post.id, post.user_id])
@@ -75,7 +93,12 @@ export default function ChatRoom({ post }: { post: Post }) {
     // Initialize chat and fetch messages
     initializeChat()
     
+    if (!chatId || !isClient()) return;
+    
     // Subscribe to new messages
+    const supabase = getSafeSupabaseClient();
+    if (!supabase) return;
+    
     const channel = supabase
       .channel('messages')
       .on(
@@ -87,7 +110,16 @@ export default function ChatRoom({ post }: { post: Post }) {
           filter: `chat_id=eq.${chatId}`,
         },
         (payload) => {
-          setMessages((current) => [...current, payload.new as Message])
+          const newMsg = payload.new as Record<string, unknown>;
+          if (newMsg) {
+            const typedMessage: Message = {
+              id: String(newMsg.id || ''),
+              content: String(newMsg.content || ''),
+              sender_id: String(newMsg.sender_id || ''),
+              created_at: String(newMsg.created_at || new Date().toISOString())
+            };
+            setMessages((current) => [...current, typedMessage])
+          }
         }
       )
       .subscribe()
@@ -107,9 +139,12 @@ export default function ChatRoom({ post }: { post: Post }) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || !chatId) return
+    if (!newMessage.trim() || !chatId || !isClient()) return
 
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) return;
+      
       const { error } = await supabase.from('messages').insert({
         chat_id: chatId,
         content: newMessage.trim(),

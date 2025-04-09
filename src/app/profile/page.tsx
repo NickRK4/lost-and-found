@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 
 export default function Profile() {
   const router = useRouter()
@@ -17,8 +17,17 @@ export default function Profile() {
 
   useEffect(() => {
     const fetchUserProfile = async () => {
+      if (!isClient()) return;
+      
       setIsLoading(true)
       try {
+        const supabase = getSafeSupabaseClient();
+        if (!supabase) {
+          setError('Unable to initialize Supabase client');
+          setIsLoading(false);
+          return;
+        }
+        
         // Get the current user from Supabase Auth
         const { data: { user } } = await supabase.auth.getUser()
         
@@ -46,8 +55,8 @@ export default function Profile() {
         
         if (profile) {
           // If profile exists, set the first and last name
-          setFirstName(profile.first_name || '')
-          setLastName(profile.last_name || '')
+          setFirstName(profile.first_name ? String(profile.first_name) : '')
+          setLastName(profile.last_name ? String(profile.last_name) : '')
         } else {
           // If no profile exists, create one with names from email
           const emailPrefix = user.email ? user.email.split('@')[0] : '';
@@ -68,7 +77,7 @@ export default function Profile() {
           const { data: existingUser, error: existingUserError } = await supabase
             .from('users')
             .select('id')
-            .eq('email', user.email)
+            .eq('email', user.email || '')
             .maybeSingle()
           
           if (existingUserError && existingUserError.code !== 'PGRST116') {
@@ -88,7 +97,7 @@ export default function Profile() {
                 first_name: defaultFirstName,
                 last_name: defaultLastName
               })
-              .eq('email', user.email)
+              .eq('email', user.email || '')
             
             profileError = updateError
           } else {
@@ -126,9 +135,19 @@ export default function Profile() {
   }, [router])
 
   const signOut = async () => {
+    if (!isClient()) return;
+    
     setIsLoading(true)
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        setError('Unable to initialize Supabase client');
+        setIsLoading(false);
+        return;
+      }
+      
       await supabase.auth.signOut()
+      localStorage.removeItem('user_id')
       router.push('/auth')
     } catch (error: unknown) {
       console.error('Error signing out:', (error as Error).message)
@@ -138,38 +157,56 @@ export default function Profile() {
   }
 
   const deleteAccount = async () => {
+    if (!isClient()) return;
+    
     setIsLoading(true)
     try {
+      const supabase = getSafeSupabaseClient();
+      if (!supabase) {
+        setError('Unable to initialize Supabase client');
+        setIsLoading(false);
+        return;
+      }
+      
       if (!userId) {
-        throw new Error('User not authenticated')
+        setError('No user ID found')
+        setIsLoading(false)
+        return
       }
 
-      // Delete user's posts
-      await supabase
+      // First delete user's posts
+      const { error: postsError } = await supabase
         .from('posts')
         .delete()
         .eq('user_id', userId)
 
-      // Delete user's messages
-      await supabase
-        .from('messages')
-        .delete()
-        .eq('user_id', userId)
+      if (postsError) {
+        console.error('Error deleting posts:', postsError)
+        throw new Error('Failed to delete posts: ' + postsError.message)
+      }
 
-      // Delete user's chats
-      await supabase
-        .from('chats')
-        .delete()
-        .or(`creator_id.eq.${userId},claimer_id.eq.${userId}`)
-
-      // Delete user's profile
-      await supabase
+      // Then delete user's profile
+      const { error: profileError } = await supabase
         .from('users')
         .delete()
         .eq('id', userId)
 
-      // Sign out
+      if (profileError) {
+        console.error('Error deleting profile:', profileError)
+        throw new Error('Failed to delete profile: ' + profileError.message)
+      }
+
+      // Finally delete the user's auth account
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+
+      if (authError) {
+        console.error('Error deleting auth user:', authError)
+        throw new Error('Failed to delete account: ' + authError.message)
+      }
+
+      // Sign out and redirect to auth page
       await supabase.auth.signOut()
+      localStorage.removeItem('user_id')
       router.push('/auth')
     } catch (error: unknown) {
       console.error('Error deleting account:', (error as Error).message)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 
 interface Message {
   id: string
@@ -25,17 +25,25 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const currentUserId = localStorage.getItem('user_id')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  // Safely get the user ID only on the client
+  useEffect(() => {
+    if (isClient()) {
+      setCurrentUserId(localStorage.getItem('user_id'))
+    }
+  }, [])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
   useEffect(() => {
-    if (!chatId) return
+    if (!chatId || !isClient()) return
 
     const fetchMessages = async () => {
       try {
+        const supabase = getSafeSupabaseClient()
         const { data, error } = await supabase
           .from('messages')
           .select('*')
@@ -45,7 +53,24 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
         if (error) throw error
         
         if (data) {
-          setMessages(data as Message[])
+          // Safely convert the data to the Message type
+          const typedMessages = data.map(item => ({
+            id: String(item.id || ''),
+            content: String(item.content || ''),
+            created_at: String(item.created_at || new Date().toISOString()),
+            user_id: String(item.user_id || ''),
+            is_system_message: Boolean(item.is_system_message),
+            sender: {
+              first_name: typeof item.sender === 'object' && item.sender ? 
+                ((item.sender as Record<string, unknown>).first_name ? String((item.sender as Record<string, unknown>).first_name) : undefined) :
+                undefined,
+              last_name: typeof item.sender === 'object' && item.sender ? 
+                ((item.sender as Record<string, unknown>).last_name ? String((item.sender as Record<string, unknown>).last_name) : undefined) :
+                undefined
+            }
+          })) as Message[]
+          
+          setMessages(typedMessages)
         }
         
       } catch (error: unknown) {
@@ -59,6 +84,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
     fetchMessages()
 
     // Set up real-time subscription
+    const supabase = getSafeSupabaseClient()
     const channel = supabase.channel('messages')
     
     channel
@@ -73,15 +99,22 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
         async (payload) => {
           try {
             // Fetch the new message directly - simple query
-            const { data: newMessage, error } = await supabase
+            const { data: newMessageData, error } = await supabase
               .from('messages')
               .select('id, content, created_at, user_id')
               .eq('id', payload.new.id)
               .single()
 
-            if (error || !newMessage) {
+            if (error || !newMessageData) {
               console.error('Error fetching new message:', error)
               return
+            }
+
+            const newMessage = {
+              id: String(newMessageData.id || ''),
+              content: String(newMessageData.content || ''),
+              created_at: String(newMessageData.created_at || new Date().toISOString()),
+              user_id: String(newMessageData.user_id || ''),
             }
 
             // Check if this is a system message based on content patterns
@@ -111,7 +144,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
             }
             
             // For regular messages, fetch the user profile if needed
-            let userProfile = null
+            let userProfile: { first_name?: string; last_name?: string } | null = null
             try {
               const { data: userData } = await supabase
                 .from('users')
@@ -119,7 +152,12 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
                 .eq('id', newMessage.user_id)
                 .single()
                 
-              userProfile = userData
+              if (userData) {
+                userProfile = {
+                  first_name: userData.first_name ? String(userData.first_name) : undefined,
+                  last_name: userData.last_name ? String(userData.last_name) : undefined
+                }
+              }
             } catch (userError) {
               console.error('Error fetching user data for new message:', userError)
               // Continue without user data
@@ -134,37 +172,32 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
               created_at: newMessage.created_at,
               user_id: newMessage.user_id,
               is_system_message: false,
-              sender: {
-                first_name: isCurrentUser ? 'You' : (userProfile?.first_name || 'User'),
-                last_name: userProfile?.last_name || ''
+              sender: { 
+                first_name: isCurrentUser 
+                  ? 'You' 
+                  : userProfile?.first_name 
+                    ? String(userProfile.first_name) 
+                    : 'Unknown',
+                last_name: isCurrentUser 
+                  ? '' 
+                  : userProfile?.last_name 
+                    ? String(userProfile.last_name) 
+                    : ''
               }
             }
             
             setMessages(prev => [...prev, formattedMessage])
             scrollToBottom()
+            
           } catch (error) {
-            console.error('Error handling real-time message:', error)
+            console.error('Error handling new message:', error)
           }
         }
       )
       .subscribe()
-
-    const messageSubscription = supabase
-      .channel(`chat-${chatId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `chat_id=eq.${chatId}`
-      }, (payload) => {
-        setMessages(prev => [...prev, payload.new as Message])
-        scrollToBottom()
-      })
-      .subscribe()
-
+    
     return () => {
-      channel.unsubscribe()
-      messageSubscription.unsubscribe()
+      supabase.removeChannel(channel)
     }
   }, [chatId, currentUserId, scrollToBottom])
 
@@ -172,10 +205,11 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
     if (!newMessage.trim() || !currentUserId) return
     
     const messageContent = newMessage.trim()
-    setNewMessage('') // Clear input immediately
+    setNewMessage('')
     
-    // Create temporary message with optimistic UI
     const tempId = `temp-${Date.now()}`
+    
+    // Create a temporary message for instant feedback
     const tempMessage: Message = {
       id: tempId,
       content: messageContent,
@@ -196,6 +230,7 @@ export default function ChatMessages({ chatId }: ChatMessagesProps) {
     // This is a "fire and forget" approach
     const sendMessageToDatabase = async () => {
       try {
+        const supabase = getSafeSupabaseClient()
         await supabase
           .from('messages')
           .insert({

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSafeSupabaseClient, isClient } from '@/lib/supabaseHelpers'
 import { User } from '@supabase/supabase-js'
 
 export function useAuth() {
@@ -9,9 +9,22 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Only run on client side
+    if (!isClient()) {
+      setLoading(false)
+      return
+    }
+    
     // Get initial session
     const getInitialSession = async () => {
       try {
+        const supabase = getSafeSupabaseClient()
+        if (!supabase) {
+          console.error('Unable to initialize Supabase client')
+          setLoading(false)
+          return
+        }
+        
         const { data: { session } } = await supabase.auth.getSession()
         
         if (session?.user) {
@@ -33,6 +46,12 @@ export function useAuth() {
     getInitialSession()
 
     // Listen for auth changes
+    const supabase = getSafeSupabaseClient()
+    if (!supabase) {
+      console.error('Unable to initialize Supabase client for auth subscription')
+      return () => {}
+    }
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
